@@ -30,11 +30,6 @@ COPY public/ ./
 COPY --from=vendor /app/vendor /usr/local/lsws/Example/html/vendor
 
 # Copy any backend logic (if not under public/)
-COPY app/ /usr/local/lsws/Example/html/app/
-COPY bootstrap/ /usr/local/lsws/Example/html/bootstrap/
-COPY config/ /usr/local/lsws/Example/html/config/
-COPY routes/ /usr/local/lsws/Example/html/routes/
-COPY artisan /usr/local/lsws/Example/html/artisan
 
 # ---------- Configure LiteSpeed ----------
 # Change LiteSpeed default document root to public/
