@@ -79,6 +79,6 @@ jobs:
       # - name: Smoke (staging)
       #   if: github.ref == 'refs/heads/staging' && secrets.HEALTHCHECK_URL_STAGING != ''
       #   run: curl -fsSL --retry 10 --retry-delay 3 "${{ secrets.HEALTHCHECK_URL_STAGING }}"
-      # - name: Smoke (prod)
+      # - name: Smoke (prod) 
       #   if: github.ref == 'refs/heads/main' && secrets.HEALTHCHECK_URL_PROD != ''
       #   run: curl -fsSL --retry 10 --retry-delay 3 "${{ secrets.HEALTHCHECK_URL_PROD }}"
