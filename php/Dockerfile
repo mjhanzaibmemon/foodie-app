@@ -36,9 +36,6 @@ COPY config/ /usr/local/lsws/Example/html/config/
 COPY routes/ /usr/local/lsws/Example/html/routes/
 COPY artisan /usr/local/lsws/Example/html/artisan
 
-# (Optional) if your app uses .env
-COPY .env /usr/local/lsws/Example/html/.env
-
 # ---------- Configure LiteSpeed ----------
 # Change LiteSpeed default document root to public/
 RUN sed -i 's|$VH_ROOT/html|$VH_ROOT|g' /usr/local/lsws/conf/httpd_config.conf
