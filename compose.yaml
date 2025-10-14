@@ -72,7 +72,7 @@ services:
       - traefik.http.services.pma.loadbalancer.server.port=80
       # 🔒 Choose ONE protection method (recommended: IP allowlist or Basic Auth)
       # IP allowlist (example: office + home)
-      # - traefik.http.middlewares.pma-allow.ipwhitelist.sourcerange=203.0.113.10/32,198.51.100.0/24
+      # - traefik.http.middlewares.pma-allow.ipwhitelist.sourcerange=203.0.113.10/32,198.51.100.0/24 
       # - traefik.http.routers.pma.middlewares=pma-allow
       # Basic Auth (use htpasswd to generate)
       # - traefik.http.middlewares.pma-auth.basicauth.users=user:$$apr1$$<salt>$$<hash>
