@@ -1,12 +1,18 @@
-FROM node20-alpine AS builder
-
-WORKDIR app
+# ---- build stage ----
+FROM node:20-alpine AS builder
+WORKDIR /app
+COPY package*.json ./
+RUN npm ci
 COPY . .
-RUN npm ci && npm run build
+RUN npm run build
 
-FROM node20-alpine
-WORKDIR app
-COPY --from=builder app .
-ENV NODE_ENV=production
-EXPOSE 3000
-CMD [npm, start]
+# ---- runtime stage ----
+FROM node:20-alpine
+WORKDIR /app
+ENV NODE_ENV=production PORT=3000
+COPY package*.json ./
+RUN npm ci --omit=dev
+# Next.js (non-standalone):
+COPY --from=builder /app/.next ./.next
+COPY --from=builder /app/public ./public
+CMD ["npm","start"]

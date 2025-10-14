@@ -42,18 +42,6 @@ services:
     networks:
       - proxy
 
-  nodejs:
-    image: ghcr.io/etra-ventures/foodie-nodejs:${IMAGE_TAG}
-    restart: unless-stopped
-    labels:
-      - traefik.enable=true
-      - traefik.http.routers.node.rule=Host(`${NODE_HOST}`)
-      - traefik.http.routers.node.entrypoints=websecure
-      - traefik.http.routers.node.tls.certresolver=le
-      - traefik.http.services.node.loadbalancer.server.port=3000
-    networks:
-      - proxy
-
   db:
     image: mysql:8.0
     restart: unless-stopped
