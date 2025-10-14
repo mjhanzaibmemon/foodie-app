@@ -11,12 +11,14 @@ services:
   php:
     image: ghcr.io/etra-ventures/foodie-litespeed:${IMAGE_TAG}
     restart: unless-stopped
+    networks:
+      - proxy
     labels:
       - traefik.enable=true
       - traefik.http.routers.php.rule=Host(`${PHP_HOST}`)
       - traefik.http.routers.php.entrypoints=websecure
       - traefik.http.routers.php.tls.certresolver=le
-      - traefik.http.services.php.loadbalancer.server.port=80
+      - traefik.http.services.php.loadbalancer.server.port=8088
     networks:
       - proxy
 
