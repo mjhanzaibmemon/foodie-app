@@ -5,14 +5,16 @@ WORKDIR /app
 COPY composer.json composer.lock ./
 RUN composer install --no-dev --prefer-dist --no-progress --no-interaction
 
-# ---------- Stage 2: LiteSpeed runtime ----------
+# In your LSWS stage
 FROM litespeedtech/openlitespeed:latest
 
-# Install PHP extensions you need (similar to before)
+# Install system deps
 RUN apt-get update && apt-get install -y \
     git unzip libzip-dev libicu-dev libpq-dev libonig-dev \
- && docker-php-ext-install pdo pdo_mysql intl zip opcache \
- && rm -rf /var/lib/apt/lists/*
+ && apt-get clean && rm -rf /var/lib/apt/lists/*
+
+# Install PHP extensions using LiteSpeed's helper
+RUN lsphp81-ext-install pdo_mysql intl zip opcache
 
 # Optional: Configure Opcache
 RUN { echo "opcache.enable=1"; \
