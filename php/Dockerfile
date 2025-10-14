@@ -10,7 +10,7 @@ FROM litespeedtech/openlitespeed:latest
 
 # Install system deps
 RUN apt-get update && apt-get install -y \
-    git unzip libzip-dev libicu-dev libpq-dev libonig-dev \
+    lsphp81 lsphp81-common lsphp81-mysql lsphp81-intl lsphp81-zip \
  && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # Install PHP extensions using LiteSpeed's helper
