@@ -45,7 +45,7 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      # Uncomment if/when you add a worker image 
+      # Uncomment if/when you add a worker image  
       # - name: Build & push Worker
       #   uses: docker/build-push-action@v6
       #   with:
