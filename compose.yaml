@@ -1,16 +1,46 @@
-version: "3.9"
+networks:
+  proxy:
+    external: true
+
+volumes:
+  mysql_data: {}
+  traefik_letsencrypt: {}
 
 services:
-  php: # OpenLiteSpeed serving your PHP app
+  traefik:
+    image: traefik:v3.1
+    restart: unless-stopped
+    command:
+      - --providers.docker=true
+      - --providers.docker.exposedbydefault=false
+      - --entrypoints.web.address=:80
+      - --entrypoints.websecure.address=:443
+      - --entrypoints.web.http.redirections.entryPoint.to=websecure
+      - --entrypoints.web.http.redirections.entryPoint.scheme=https
+      # Let's Encrypt (HTTP-01)
+      - --certificatesresolvers.le.acme.email=${LE_EMAIL}
+      - --certificatesresolvers.le.acme.httpChallenge.entryPoint=web
+      - --certificatesresolvers.le.acme.storage=/letsencrypt/acme.json
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - traefik_letsencrypt:/letsencrypt
+    networks:
+      - proxy
+
+  php:
     image: ghcr.io/etra-ventures/foodie-litespeed:${IMAGE_TAG}
     restart: unless-stopped
-    # (your env/volumes/labels here)
     labels:
       - traefik.enable=true
       - traefik.http.routers.php.rule=Host(`${PHP_HOST}`)
       - traefik.http.routers.php.entrypoints=websecure
-      - traefik.http.routers.php.tls=true
+      - traefik.http.routers.php.tls.certresolver=le
       - traefik.http.services.php.loadbalancer.server.port=80
+    networks:
+      - proxy
 
   nodejs:
     image: ghcr.io/etra-ventures/foodie-nodejs:${IMAGE_TAG}
@@ -19,8 +49,10 @@ services:
       - traefik.enable=true
       - traefik.http.routers.node.rule=Host(`${NODE_HOST}`)
       - traefik.http.routers.node.entrypoints=websecure
-      - traefik.http.routers.node.tls=true
+      - traefik.http.routers.node.tls.certresolver=le
       - traefik.http.services.node.loadbalancer.server.port=3000
+    networks:
+      - proxy
 
   db:
     image: mysql:8.0
@@ -32,7 +64,6 @@ services:
       MYSQL_PASSWORD: ${MYSQL_PASSWORD}
     volumes:
       - mysql_data:/var/lib/mysql
-    # 🚫 No 'ports:' → internal-only
 
   phpmyadmin:
     image: phpmyadmin:5
@@ -40,34 +71,28 @@ services:
     depends_on:
       - db
     environment:
-      PMA_HOST: db                   # connect to internal MySQL service
+      PMA_HOST: db
       PMA_USER: ${MYSQL_USER}
       PMA_PASSWORD: ${MYSQL_PASSWORD}
       PMA_ABSOLUTE_URI: https://${PMA_HOST}/
       UPLOAD_LIMIT: 64M
-      # Optional: allow connecting to other servers from the UI
-      # PMA_ARBITRARY: 1
-      # Optional: stronger cookie encryption
-      # PMA_PMADB: phpmyadmin
-      # PHP_UPLOAD_MAX_FILESIZE: 64M
     labels:
       - traefik.enable=true
       - traefik.http.routers.pma.rule=Host(`${PMA_HOST}`)
       - traefik.http.routers.pma.entrypoints=websecure
-      - traefik.http.routers.pma.tls=true
+      - traefik.http.routers.pma.tls.certresolver=le
       - traefik.http.services.pma.loadbalancer.server.port=80
-      # 🔒 Add one of the protections below (Basic Auth or IP allowlist)
-      # - traefik.http.middlewares.pma-auth.basicauth.users=user:$$apr1$$hash$$saltedhash
-      # - traefik.http.routers.pma.middlewares=pma-auth
-      # or
-      # - traefik.http.middlewares.pma-allow.ipwhitelist.sourcerange=YOUR.IP.BLOCK/32
+      # 🔒 Choose ONE protection method (recommended: IP allowlist or Basic Auth)
+      # IP allowlist (example: office + home)
+      # - traefik.http.middlewares.pma-allow.ipwhitelist.sourcerange=203.0.113.10/32,198.51.100.0/24
       # - traefik.http.routers.pma.middlewares=pma-allow
-    # Optional runtime caps so it never hogs the box
+      # Basic Auth (use htpasswd to generate)
+      # - traefik.http.middlewares.pma-auth.basicauth.users=user:$$apr1$$<salt>$$<hash>
+      # - traefik.http.routers.pma.middlewares=pma-auth
     deploy:
       resources:
         limits:
           cpus: '0.2'
           memory: 256M
-
-volumes:
-  mysql_data: {}
+    networks:
+      - proxy

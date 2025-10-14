@@ -1,0 +1,20 @@
+# Environment files
+.env
+.env.*
+!.env.example  # keep a safe example for others
+
+# Docker
+**/vendor
+**/node_modules
+**/storage
+**/.dockerignore
+**/docker-compose.override.yml
+**/compose.override.yml
+**/tmp
+**/logs
+.DS_Store
+
+# IDE
+.vscode
+.idea
+*.swp
