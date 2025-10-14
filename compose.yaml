@@ -1,35 +1,13 @@
+version: "3.9"
+
 networks:
   proxy:
     external: true
 
 volumes:
   mysql_data: {}
-  traefik_letsencrypt: {}
 
 services:
-  traefik:
-    image: traefik:v3.1
-    restart: unless-stopped
-    command:
-      - --providers.docker=true
-      - --providers.docker.exposedbydefault=false
-      - --entrypoints.web.address=:80
-      - --entrypoints.websecure.address=:443
-      - --entrypoints.web.http.redirections.entryPoint.to=websecure
-      - --entrypoints.web.http.redirections.entryPoint.scheme=https
-      # Let's Encrypt (HTTP-01)
-      - --certificatesresolvers.le.acme.email=${LE_EMAIL}
-      - --certificatesresolvers.le.acme.httpChallenge.entryPoint=web
-      - --certificatesresolvers.le.acme.storage=/letsencrypt/acme.json
-    ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro
-      - traefik_letsencrypt:/letsencrypt
-    networks:
-      - proxy
-
   php:
     image: ghcr.io/etra-ventures/foodie-litespeed:${IMAGE_TAG}
     restart: unless-stopped
@@ -52,6 +30,8 @@ services:
       MYSQL_PASSWORD: ${MYSQL_PASSWORD}
     volumes:
       - mysql_data:/var/lib/mysql
+    networks:
+      - proxy
 
   phpmyadmin:
     image: phpmyadmin:5
@@ -70,11 +50,7 @@ services:
       - traefik.http.routers.pma.entrypoints=websecure
       - traefik.http.routers.pma.tls.certresolver=le
       - traefik.http.services.pma.loadbalancer.server.port=80
-      # 🔒 Choose ONE protection method (recommended: IP allowlist or Basic Auth)
-      # IP allowlist (example: office + home)
-      # - traefik.http.middlewares.pma-allow.ipwhitelist.sourcerange=203.0.113.10/32,198.51.100.0/24  
-      # - traefik.http.routers.pma.middlewares=pma-allow
-      # Basic Auth (use htpasswd to generate)
+      # Optional security
       # - traefik.http.middlewares.pma-auth.basicauth.users=user:$$apr1$$<salt>$$<hash>
       # - traefik.http.routers.pma.middlewares=pma-auth
     deploy:
