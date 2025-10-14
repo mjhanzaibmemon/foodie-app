@@ -45,17 +45,6 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Build & push NodeJS
-        uses: docker/build-push-action@v6
-        with:
-          context: ./nodejs
-          push: true
-          tags: |
-            ${{ env.REGISTRY }}/${{ env.OWNER }}/foodie-nodejs:${{ env.IMAGE_TAG }}
-            ${{ env.REGISTRY }}/${{ env.OWNER }}/foodie-nodejs:latest
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
       # Uncomment if/when you add a worker image
       # - name: Build & push Worker
       #   uses: docker/build-push-action@v6
