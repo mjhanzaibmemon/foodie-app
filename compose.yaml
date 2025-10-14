@@ -2,7 +2,7 @@ version: "3.8"
 
 services:
   php:
-    image: ghcr.io/ORG/foodie-php:${IMAGE_TAG}
+    image: ghcr.io/etra-ventures/foodie-php:${IMAGE_TAG}
     depends_on:
       db:
         condition: service_healthy
@@ -22,7 +22,7 @@ services:
       DB_PASSWORD: ${MYSQL_PASSWORD}
 
   nodejs:
-    image: ghcr.io/ORG/foodie-nodejs:${IMAGE_TAG}
+    image: ghcr.io/etra-ventures/foodie-nodejs:${IMAGE_TAG}
     depends_on:
       - php
     labels:
@@ -36,7 +36,7 @@ services:
       API_URL: https://${PHP_HOST}
 
   worker:
-    image: ghcr.io/ORG/foodie-worker:${IMAGE_TAG}
+    image: ghcr.io/etra-ventures/foodie-worker:${IMAGE_TAG}
     depends_on:
       - php
       - redis
