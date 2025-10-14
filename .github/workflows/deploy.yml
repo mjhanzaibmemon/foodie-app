@@ -1,0 +1,21 @@
+- name: Build & push PHP
+  uses: docker/build-push-action@v6
+  with:
+    context: ./php
+    push: true
+    tags: |
+      ${{ env.REGISTRY }}/${{ github.repository_owner }}/foodie-php:${{ env.IMAGE_TAG }}
+      ${{ env.REGISTRY }}/${{ github.repository_owner }}/foodie-php:latest
+    cache-from: type=gha
+    cache-to: type=gha,mode=max
+
+- name: Build & push NodeJS
+  uses: docker/build-push-action@v6
+  with:
+    context: ./nodejs
+    push: true
+    tags: |
+      ${{ env.REGISTRY }}/${{ github.repository_owner }}/foodie-nodejs:${{ env.IMAGE_TAG }}
+      ${{ env.REGISTRY }}/${{ github.repository_owner }}/foodie-nodejs:latest
+    cache-from: type=gha
+    cache-to: type=gha,mode=max

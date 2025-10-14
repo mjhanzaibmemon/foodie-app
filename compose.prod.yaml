@@ -1,0 +1,7 @@
+# compose.prod.yaml
+services:
+  php:
+    cpus: "1.5"
+    mem_limit: "2g"
+  phpmyadmin:
+    profiles: ["never"]   # or remove service entirely for prod

@@ -1,0 +1,8 @@
+# compose.staging.yaml
+services:
+  php:
+    mem_limit: "1g"
+  phpmyadmin:
+    labels:
+      - traefik.http.middlewares.pma-auth.basicauth.users=...
+      - traefik.http.routers.phpmyadmin.middlewares=pma-auth
