@@ -1,70 +1,38 @@
-version: "3.8"
+version: "3.9"
 
 services:
-  php:
-    image: ghcr.io/etra-ventures/foodie-php:${IMAGE_TAG}
-    depends_on:
-      db:
-        condition: service_healthy
-      redis:
-        condition: service_started
+  php: # OpenLiteSpeed serving your PHP app
+    image: ghcr.io/etra-ventures/foodie-litespeed:${IMAGE_TAG}
+    restart: unless-stopped
+    # (your env/volumes/labels here)
     labels:
       - traefik.enable=true
       - traefik.http.routers.php.rule=Host(`${PHP_HOST}`)
       - traefik.http.routers.php.entrypoints=websecure
       - traefik.http.routers.php.tls=true
-      - traefik.http.services.php.loadbalancer.server.port=9000
-    environment:
-      APP_ENV: production
-      DB_HOST: db
-      DB_DATABASE: ${MYSQL_DATABASE}
-      DB_USERNAME: ${MYSQL_USER}
-      DB_PASSWORD: ${MYSQL_PASSWORD}
+      - traefik.http.services.php.loadbalancer.server.port=80
 
   nodejs:
     image: ghcr.io/etra-ventures/foodie-nodejs:${IMAGE_TAG}
-    depends_on:
-      - php
+    restart: unless-stopped
     labels:
       - traefik.enable=true
-      - traefik.http.routers.nodejs.rule=Host(`${NODE_HOST}`)
-      - traefik.http.routers.nodejs.entrypoints=websecure
-      - traefik.http.routers.nodejs.tls=true
-      - traefik.http.services.nodejs.loadbalancer.server.port=3000
-    environment:
-      NODE_ENV: production
-      API_URL: https://${PHP_HOST}
-
-  worker:
-    image: ghcr.io/etra-ventures/foodie-worker:${IMAGE_TAG}
-    depends_on:
-      - php
-      - redis
-
-  redis:
-    image: redis:7
-    command: ["redis-server","--appendonly","yes"]
+      - traefik.http.routers.node.rule=Host(`${NODE_HOST}`)
+      - traefik.http.routers.node.entrypoints=websecure
+      - traefik.http.routers.node.tls=true
+      - traefik.http.services.node.loadbalancer.server.port=3000
 
   db:
     image: mysql:8.0
-    command: [
-      "mysqld",
-      "--default-authentication-plugin=mysql_native_password",
-      "--character-set-server=utf8mb4",
-      "--collation-server=utf8mb4_unicode_ci"
-    ]
+    restart: unless-stopped
     environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
       MYSQL_DATABASE: ${MYSQL_DATABASE}
       MYSQL_USER: ${MYSQL_USER}
       MYSQL_PASSWORD: ${MYSQL_PASSWORD}
-      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
     volumes:
       - mysql_data:/var/lib/mysql
-    healthcheck:
-      test: ["CMD-SHELL","mysqladmin ping -h localhost -p$${MYSQL_ROOT_PASSWORD} --silent"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
+    # 🚫 No 'ports:' → internal-only
 
   phpmyadmin:
     image: phpmyadmin:5
@@ -72,16 +40,34 @@ services:
     depends_on:
       - db
     environment:
-      PMA_HOST: db
+      PMA_HOST: db                   # connect to internal MySQL service
       PMA_USER: ${MYSQL_USER}
       PMA_PASSWORD: ${MYSQL_PASSWORD}
+      PMA_ABSOLUTE_URI: https://${PMA_HOST}/
       UPLOAD_LIMIT: 64M
+      # Optional: allow connecting to other servers from the UI
+      # PMA_ARBITRARY: 1
+      # Optional: stronger cookie encryption
+      # PMA_PMADB: phpmyadmin
+      # PHP_UPLOAD_MAX_FILESIZE: 64M
     labels:
       - traefik.enable=true
-      - traefik.http.routers.phpmyadmin.rule=Host(`${PMA_HOST}`)
-      - traefik.http.routers.phpmyadmin.entrypoints=websecure
-      - traefik.http.routers.phpmyadmin.tls=true
-      - traefik.http.services.phpmyadmin.loadbalancer.server.port=80
+      - traefik.http.routers.pma.rule=Host(`${PMA_HOST}`)
+      - traefik.http.routers.pma.entrypoints=websecure
+      - traefik.http.routers.pma.tls=true
+      - traefik.http.services.pma.loadbalancer.server.port=80
+      # 🔒 Add one of the protections below (Basic Auth or IP allowlist)
+      # - traefik.http.middlewares.pma-auth.basicauth.users=user:$$apr1$$hash$$saltedhash
+      # - traefik.http.routers.pma.middlewares=pma-auth
+      # or
+      # - traefik.http.middlewares.pma-allow.ipwhitelist.sourcerange=YOUR.IP.BLOCK/32
+      # - traefik.http.routers.pma.middlewares=pma-allow
+    # Optional runtime caps so it never hogs the box
+    deploy:
+      resources:
+        limits:
+          cpus: '0.2'
+          memory: 256M
 
 volumes:
   mysql_data: {}
