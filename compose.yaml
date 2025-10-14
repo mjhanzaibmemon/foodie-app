@@ -16,8 +16,7 @@ services:
     labels:
       - traefik.enable=true
       - traefik.http.routers.php.rule=Host(`${PHP_HOST}`)
-      - traefik.http.routers.php.entrypoints=websecure
-      - traefik.http.routers.php.tls.certresolver=le
+      - traefik.http.routers.php.tls=true
       - traefik.http.services.php.loadbalancer.server.port=8088
     networks:
       - proxy
@@ -49,8 +48,7 @@ services:
     labels:
       - traefik.enable=true
       - traefik.http.routers.pma.rule=Host(`${PMA_HOST}`)
-      - traefik.http.routers.pma.entrypoints=websecure
-      - traefik.http.routers.pma.tls.certresolver=le
+      - traefik.http.routers.pma.tls=true
       - traefik.http.services.pma.loadbalancer.server.port=80
       # Optional security
       # - traefik.http.middlewares.pma-auth.basicauth.users=user:$$apr1$$<salt>$$<hash>
