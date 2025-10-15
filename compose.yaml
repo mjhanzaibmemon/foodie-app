@@ -13,13 +13,22 @@ services:
     build:
       context: ./php
       dockerfile: Dockerfile
-    ports:
-      - "8081:8088"
+    # Optional: You can remove the ports block if you only want Traefik to expose it
+    # ports:
+    #   - "8081:8088"
     volumes:
       - ./php/public:/usr/local/lsws/Example/html
     environment:
       - LSWS_ADMIN_USER=admin
       - LSWS_ADMIN_PASS=admin
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.php.rule=Host(`foodie.app`)
+      - traefik.http.routers.php.entrypoints=websecure
+      - traefik.http.routers.php.tls=true
+      - traefik.http.services.php.loadbalancer.server.port=8088
+    networks:
+      - proxy
 
   db:
     image: mysql:8.0
