@@ -1,44 +1,33 @@
-# ---------- Stage 1: Build Composer deps ----------
-FROM composer:2 AS vendor
-
-WORKDIR /app
-COPY composer.json composer.lock ./
-RUN composer install --no-dev --prefer-dist --no-progress --no-interaction
-
-# In your LSWS stage
 FROM litespeedtech/openlitespeed:latest
 
-# Install system deps
+# Add LiteSpeed repo
+RUN apt-get update && apt-get install -y curl gnupg2 ca-certificates && \
+    curl -s https://repo.litespeed.sh | bash
+
+# Install PHP 8.1 and common extensions
 RUN apt-get update && apt-get install -y \
-    lsphp81 lsphp81-common lsphp81-mysql lsphp81-intl lsphp81-zip \
- && apt-get clean && rm -rf /var/lib/apt/lists/*
+    lsphp81 lsphp81-common lsphp81-mysql lsphp81-intl lsphp81-curl \
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
 
-# Install PHP extensions using LiteSpeed's helper
-RUN lsphp81-ext-install pdo_mysql intl zip opcache
-
-# Optional: Configure Opcache
-RUN { echo "opcache.enable=1"; \
-      echo "opcache.jit_buffer_size=64M"; \
-      echo "opcache.jit=tracing"; } > /usr/local/lsws/lsphp81/etc/php.d/99-opcache.ini
-
-# ---------- Copy app code ----------
-# Use /usr/local/lsws/Example/html as the web root
+# Set working directory (default OLS doc root)
 WORKDIR /usr/local/lsws/Example/html
 
-# Copy app code (only public-facing files)
+# Remove default files
+RUN rm -rf /usr/local/lsws/Example/html/*
+
+# Copy your PHP app (e.g., index.php inside ./public)
 COPY public/ ./
 
-# Copy vendor deps from Composer build stage
-COPY --from=vendor /app/vendor /usr/local/lsws/Example/html/vendor
+# Set up PHP 8.1 handler
+RUN ln -sf /usr/local/lsws/lsphp81/bin/lsphp /usr/local/lsws/fcgi-bin/lsphp
 
-# Copy any backend logic (if not under public/)
+# Copy virtual host config
+COPY ols-vhconf.conf /usr/local/lsws/conf/vhosts/Example/vhconf.conf
 
-# ---------- Configure LiteSpeed ----------
-# Change LiteSpeed default document root to public/
-RUN sed -i 's|$VH_ROOT/html|$VH_ROOT|g' /usr/local/lsws/conf/httpd_config.conf
+# Entrypoint
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
 
-# Expose LiteSpeed ports
-EXPOSE 8088 7080
+EXPOSE 8088
 
-# Start LiteSpeed
-CMD ["/usr/local/lsws/bin/lswsctrl", "start", "-d", "&&", "tail", "-f", "/usr/local/lsws/logs/error.log"]
+CMD ["/entrypoint.sh"]
