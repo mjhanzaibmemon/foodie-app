@@ -14,7 +14,7 @@ services:
       context: ./php
       dockerfile: Dockerfile
     ports:
-      - "8080:8088"
+      - "8081:8088"
     volumes:
       - ./php/public:/usr/local/lsws/Example/html
     environment:
