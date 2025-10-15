@@ -7,7 +7,6 @@ networks:
 volumes:
   mysql_data: {}
 
-
 services:
   php:
     build:
@@ -16,8 +15,6 @@ services:
     # Optional: You can remove the ports block if you only want Traefik to expose it
     # ports:
     #   - "8081:8088"
-    volumes:
-      - ./php/public:/usr/local/lsws/Example/html
     environment:
       - LSWS_ADMIN_USER=admin
       - LSWS_ADMIN_PASS=admin
