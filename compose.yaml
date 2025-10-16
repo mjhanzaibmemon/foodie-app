@@ -23,6 +23,7 @@ services:
       - traefik.http.routers.php.rule=Host(`foodie.app`)
       - traefik.http.routers.php.entrypoints=websecure
       - traefik.http.routers.php.tls=true
+      - traefik.http.routers.php.tls.certresolver=myresolver
       - traefik.http.services.php.loadbalancer.server.port=8088
     networks:
       - proxy
@@ -54,11 +55,10 @@ services:
     labels:
       - traefik.enable=true
       - traefik.http.routers.pma.rule=Host(`phpmyadmin.foodie.app`)
+      - traefik.http.routers.pma.entrypoints=websecure
       - traefik.http.routers.pma.tls=true
+      - traefik.http.routers.pma.tls.certresolver=myresolver
       - traefik.http.services.pma.loadbalancer.server.port=80
-      # Optional security
-      # - traefik.http.middlewares.pma-auth.basicauth.users=user:$$apr1$$<salt>$$<hash>
-      # - traefik.http.routers.pma.middlewares=pma-auth  
     deploy:
       resources:
         limits:
