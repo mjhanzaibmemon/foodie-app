@@ -53,7 +53,7 @@ services:
       UPLOAD_LIMIT: 64M
     labels:
       - traefik.enable=true
-      - traefik.http.routers.pma.rule=Host(`${PMA_HOST}`)
+      - traefik.http.routers.pma.rule=Host(`phpmyadmin.foodie.app`)
       - traefik.http.routers.pma.tls=true
       - traefik.http.services.pma.loadbalancer.server.port=80
       # Optional security
