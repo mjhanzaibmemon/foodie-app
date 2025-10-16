@@ -1,6 +1,6 @@
 <?php
 
-
+die;
 
 phpinfo();
 ?>
