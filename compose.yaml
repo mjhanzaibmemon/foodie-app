@@ -18,13 +18,13 @@ services:
     environment:
       - LSWS_ADMIN_USER=admin
       - LSWS_ADMIN_PASS=admin
-    labels:
-      - traefik.enable=true
-      - traefik.http.routers.php.rule=Host(`foodie.app`)
-      - traefik.http.routers.php.entrypoints=websecure
-      - traefik.http.routers.php.tls=true
-      - traefik.http.routers.php.tls.certresolver=myresolver
-      - traefik.http.services.php.loadbalancer.server.port=8088
+  labels:
+    - traefik.enable=true
+    - traefik.http.routers.php.rule=Host(`foodie.app`)
+    - traefik.http.routers.php.entrypoints=websecure
+    - traefik.http.routers.php.tls=true
+    - traefik.http.routers.php.tls.certresolver=myresolver
+    - traefik.http.services.php.loadbalancer.server.port=8088
     networks:
       - proxy
 
