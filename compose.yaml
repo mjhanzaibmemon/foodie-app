@@ -8,13 +8,25 @@ volumes:
   mysql_data: {}
 
 services:
+  traefik:
+    image: traefik:v3.1
+    command:
+      - "--configFile=/etc/traefik/traefik.yml"
+    volumes:
+      - ./traefik.yml:/etc/traefik/traefik.yml
+      - ./letsencrypt:/letsencrypt
+      - /var/run/docker.sock:/var/run/docker.sock
+    ports:
+      - "80:80"
+      - "443:443"
+      - "8080:8080"
+    networks:
+      - proxy
+
   php:
     build:
       context: ./php
       dockerfile: Dockerfile
-    # Optional: You can remove the ports block if you only want Traefik to expose it
-    # ports:
-    #   - "8081:8088"
     environment:
       - LSWS_ADMIN_USER=admin
       - LSWS_ADMIN_PASS=admin
@@ -23,6 +35,7 @@ services:
       - traefik.http.routers.php.rule=Host(`foodie.app`)
       - traefik.http.routers.php.entrypoints=websecure
       - traefik.http.routers.php.tls=true
+      - traefik.http.routers.php.tls.certresolver=myresolver
       - traefik.http.services.php.loadbalancer.server.port=8088
     networks:
       - proxy
@@ -34,11 +47,6 @@ services:
 
   db:
     image: mysql:8.0
-    healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
     restart: unless-stopped
     environment:
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
@@ -49,6 +57,11 @@ services:
       - mysql_data:/var/lib/mysql
     networks:
       - proxy
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
 
   phpmyadmin:
     image: phpmyadmin:5
@@ -64,11 +77,10 @@ services:
     labels:
       - traefik.enable=true
       - traefik.http.routers.pma.rule=Host(`phpmyadmin.foodie.app`)
+      - traefik.http.routers.pma.entrypoints=websecure
       - traefik.http.routers.pma.tls=true
+      - traefik.http.routers.pma.tls.certresolver=myresolver
       - traefik.http.services.pma.loadbalancer.server.port=80
-      # Optional security
-      # - traefik.http.middlewares.pma-auth.basicauth.users=user:$$apr1$$<salt>$$<hash>
-      # - traefik.http.routers.pma.middlewares=pma-auth  
     deploy:
       resources:
         limits:
