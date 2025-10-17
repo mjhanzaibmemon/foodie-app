@@ -1,10 +1,11 @@
 <?php
+
 $servername = 'db'; // container hostname = service name
 $username   = getenv('MYSQL_USER');
 $password   = getenv('MYSQL_PASSWORD');
 $dbname     = "foodie_prod";
 
-echo $username;die;
+echo "<br>MYSQL_USER: " . getenv('MYSQL_USER');die;
 
 // Create connection
 $conn = new mysqli($servername, $username, $password, $dbname);
