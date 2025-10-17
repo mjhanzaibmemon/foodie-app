@@ -1,7 +1,7 @@
 <?php
 
 $servername = 'db'; // container hostname = service name
-$username   = getenv('MYSQL_USER');
+$username   = getenv('db_user');
 $password   = getenv('MYSQL_PASSWORD');
 $dbname     = "foodie_prod";
 
