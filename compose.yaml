@@ -12,20 +12,23 @@ services:
 
   envfetcher:
     image: amazon/aws-cli
+    entrypoint: ["/bin/sh", "-c"]
     command: >
-      sh -c "aws ssm get-parameters-by-path --path /foodie/prod
+      "aws ssm get-parameters-by-path --path /foodie/prod
       --with-decryption --region us-east-2
       --query 'Parameters[*].[Name,Value]' --output text |
       sed 's/\t/=/g' | sed 's|/foodie/prod/||g' > /shared/.env"
     environment:
       AWS_REGION: us-east-2
     volumes:
-      - shared_env:/shared   # 👈 mounts the shared_env volume
+      - shared_env:/shared
     healthcheck:
       test: ["CMD-SHELL", "[ -s /shared/.env ] || exit 1"]
       interval: 5s
       timeout: 3s
       retries: 10
+    restart: "no"
+
 
   php:
     build:
