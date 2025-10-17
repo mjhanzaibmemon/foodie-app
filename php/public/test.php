@@ -5,7 +5,7 @@ $username   = getenv('db_user');
 $password   = getenv('MYSQL_PASSWORD');
 $dbname     = "foodie_prod";
 
-echo "<br>MYSQL_USER: " . getenv('MYSQL_USER');die;
+echo "<br>MYSQL_USER: " . getenv('db_user');die;
 
 // Create connection
 $conn = new mysqli($servername, $username, $password, $dbname);
