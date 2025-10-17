@@ -9,19 +9,6 @@ volumes:
 
 services:
 
-  envloader:
-    image: amazon/aws-cli
-    entrypoint: ["/bin/sh", "-c"]
-    command: >
-      "aws ssm get-parameters-by-path --path /foodie/prod --with-decryption
-      --query 'Parameters[*].[Name,Value]' --output text |
-      sed 's/\t/=/g' > /shared/envfile &&
-      echo '✅ Environment variables fetched from AWS SSM'"
-    environment:
-      AWS_REGION: eu-west-2
-    volumes:
-      - ./shared:/shared
-
   php:
     build:
       context: ./php
