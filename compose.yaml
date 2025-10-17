@@ -6,40 +6,13 @@ networks:
 
 volumes:
   mysql_data: {}
-  shared_env: {}   # 👈 Add this here — top-level volume definition
 
 services:
-
-  envfetcher:
-    image: amazon/aws-cli
-    entrypoint: ["/bin/sh", "-c"]
-    command: >
-      "aws ssm get-parameters-by-path --path /foodie/prod
-      --with-decryption --region us-east-2
-      --query 'Parameters[*].[Name,Value]' --output text |
-      sed 's/\t/=/g' | sed 's|/foodie/prod/||g' > /shared/.env"
-    environment:
-      AWS_REGION: us-east-2
-    volumes:
-      - shared_env:/shared
-    healthcheck:
-      test: ["CMD-SHELL", "[ -s /shared/.env ] || exit 1"]
-      interval: 5s
-      timeout: 3s
-      retries: 10
-    restart: "no"
-
 
   php:
     build:
       context: ./php
       dockerfile: Dockerfile
-    depends_on:
-      - envfetcher           # 👈 ensures envfetcher runs first
-    env_file:
-      - /shared/.env         # 👈 reads env vars from shared volume
-    volumes:
-      - shared_env:/shared   # 👈 mounts same shared volume
     environment:
       - LSWS_ADMIN_USER=admin
       - LSWS_ADMIN_PASS=admin
@@ -61,13 +34,8 @@ services:
   db:
     image: mysql:8.0
     restart: unless-stopped
-    depends_on:
-      - envfetcher
-    env_file:
-      - /shared/.env
     volumes:
       - mysql_data:/var/lib/mysql
-      - shared_env:/shared   # 👈 so db can also read shared env
     networks:
       - proxy
     healthcheck:
@@ -81,10 +49,6 @@ services:
     restart: unless-stopped
     depends_on:
       - db
-    env_file:
-      - /shared/.env
-    volumes:
-      - shared_env:/shared   # 👈 optional, but consistent
     environment:
       PMA_HOST: db
       PMA_ABSOLUTE_URI: https://phpmyadmin.foodie.app/
