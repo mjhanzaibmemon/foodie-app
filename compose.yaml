@@ -34,6 +34,11 @@ services:
   db:
     image: mysql:8.0
     restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
     volumes:
       - mysql_data:/var/lib/mysql
     networks:
@@ -51,6 +56,8 @@ services:
       - db
     environment:
       PMA_HOST: db
+      PMA_USER: ${MYSQL_USER}
+      PMA_PASSWORD: ${MYSQL_PASSWORD}
       PMA_ABSOLUTE_URI: https://phpmyadmin.foodie.app/
       UPLOAD_LIMIT: 64M
     labels:
