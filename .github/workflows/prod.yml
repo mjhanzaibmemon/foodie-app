@@ -1,0 +1,15 @@
+name: Prod Deployment
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+    
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - name: SSH Deploy
+      run: echo "Example prod deployment"
