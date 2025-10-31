@@ -10,8 +10,9 @@ env:
   OWNER: etra-ventures
 
 jobs:
-  build-and-push:
+  deploy:
     runs-on: ubuntu-latest
+    environment: prod
     permissions:
       contents: read
       packages: write
