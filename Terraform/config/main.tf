@@ -17,7 +17,7 @@ module "eks_subnet_1" {
   vpc_id                  = module.vpc.vpc_id
   cidr_block              = "10.0.2.0/24"
   map_public_ip_on_launch = true
-  availability_zone       = "us-east-1a"
+  availability_zone       = "us-east-2a"
 
   depends_on = [module.vpc]
 }
@@ -27,7 +27,7 @@ module "eks_subnet_2" {
   vpc_id                  = module.vpc.vpc_id
   cidr_block              = "10.0.1.0/24"
   map_public_ip_on_launch = true
-  availability_zone       = "us-east-1b"
+  availability_zone       = "us-east-2b"
 
   depends_on = [module.vpc]
 }
@@ -37,8 +37,8 @@ module "eks_subnet_2" {
 ################################################################################
 
 module "eks_cluster_iam_role" {
-  source             = "../modules/iam"
-  role_name          = "eks_cluster_role"
+  source    = "../modules/iam"
+  role_name = "eks_cluster_role"
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{
@@ -51,8 +51,8 @@ module "eks_cluster_iam_role" {
 
 # EKS Node Group Role
 module "eks_node_group_role" {
-  source             = "../modules/iam"
-  role_name          = "eks_node_role"
+  source    = "../modules/iam"
+  role_name = "eks_node_role"
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{
@@ -68,7 +68,7 @@ module "eks_node_group_role" {
 ################################################################################
 
 module "eks_cluster_policy_attachment" {
-  source = "../modules/iam_role_policy_attachment"
+  source                      = "../modules/iam_role_policy_attachment"
   policy_attachment_role_name = module.eks_cluster_iam_role.role_name
   cluster_policy_arn          = "arn:aws:iam::aws:policy/AmazonEKSClusterPolicy"
 
@@ -77,7 +77,7 @@ module "eks_cluster_policy_attachment" {
 
 # Attach AmazonEKSServicePolicy to cluster role
 module "eks_service_policy_attachment" {
-  source = "../modules/iam_role_policy_attachment"
+  source                      = "../modules/iam_role_policy_attachment"
   policy_attachment_role_name = module.eks_cluster_iam_role.role_name
   cluster_policy_arn          = "arn:aws:iam::aws:policy/AmazonEKSServicePolicy"
 
@@ -89,7 +89,7 @@ module "eks_service_policy_attachment" {
 ################################################################################
 
 module "eks_worker_node_policy_attachment" {
-  source = "../modules/iam_role_policy_attachment"
+  source                      = "../modules/iam_role_policy_attachment"
   policy_attachment_role_name = module.eks_node_group_role.role_name
   cluster_policy_arn          = "arn:aws:iam::aws:policy/AmazonEKSWorkerNodePolicy"
 
@@ -98,7 +98,7 @@ module "eks_worker_node_policy_attachment" {
 
 # CNI Policy
 module "eks_node_cni_policy_attachment" {
-  source = "../modules/iam_role_policy_attachment"
+  source                      = "../modules/iam_role_policy_attachment"
   policy_attachment_role_name = module.eks_node_group_role.role_name
   cluster_policy_arn          = "arn:aws:iam::aws:policy/AmazonEKS_CNI_Policy"
 
@@ -107,7 +107,7 @@ module "eks_node_cni_policy_attachment" {
 
 # ECR ReadOnly Policy
 module "eks_node_ecr_policy_attachment" {
-  source = "../modules/iam_role_policy_attachment"
+  source                      = "../modules/iam_role_policy_attachment"
   policy_attachment_role_name = module.eks_node_group_role.role_name
   cluster_policy_arn          = "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly"
 
@@ -119,22 +119,21 @@ module "eks_node_ecr_policy_attachment" {
 ################################################################################
 
 module "eks_cluster" {
-  source                   = "../modules/eks_cluster"
-  cluster_name             = "my-eks-cluster"
-  kubernetes_version       = "1.32"
-  role_arn                 = module.eks_cluster_iam_role.role_arn
-  authentication_mode      = "API"
-  subnet_ids               = [module.eks_subnet_1.subnet_id, module.eks_subnet_2.subnet_id]
+  source                    = "../modules/eks_cluster"
+  cluster_name              = "my-eks-cluster"
+  kubernetes_version        = "1.32"
+  role_arn                  = module.eks_cluster_iam_role.role_arn
+  authentication_mode       = "API"
+  subnet_ids                = [module.eks_subnet_1.subnet_id, module.eks_subnet_2.subnet_id]
   enabled_cluster_log_types = ["api", "audit", "authenticator"]
-  service_ipv4_cidr        = "172.20.0.0/16"
+  service_ipv4_cidr         = "172.20.0.0/16"
 
   endpoint_private_access = true
   endpoint_public_access  = true
   public_access_cidrs     = ["0.0.0.0/0"]
 
   tags = {
-    Environment = "dev"
-    Project     = "eks-setup"
+    Project = "eks-setup"
   }
 
   depends_on = [
@@ -202,8 +201,8 @@ module "internet_gateway" {
   source = "../modules/igw"
 
   vpc_id = module.vpc.vpc_id
-  
-  depends_on = [ module.vpc ]
+
+  depends_on = [module.vpc]
 }
 
 ################################################################################
@@ -214,10 +213,10 @@ module "route_table" {
 
   source = "../modules/route_table"
 
-  vpc_id = module.vpc.vpc_id 
+  vpc_id  = module.vpc.vpc_id
   rt_name = "Internet_route"
 
-  depends_on = [ module.eks_subnet_1, module.eks_subnet_2 ]
+  depends_on = [module.eks_subnet_1, module.eks_subnet_2]
 }
 
 ################################################################################
@@ -228,11 +227,11 @@ module "routes" {
 
   source = "../modules/route"
 
-  route_table_id = module.route_table.id
+  route_table_id         = module.route_table.id
   destination_cidr_block = "0.0.0.0/0"
-  gateway_id = module.internet_gateway.igw_id
+  gateway_id             = module.internet_gateway.igw_id
 
-  depends_on = [ module.route_table ]
+  depends_on = [module.route_table]
 }
 
 ################################################################################
@@ -240,23 +239,23 @@ module "routes" {
 ################################################################################
 
 module "subnet_1_rt_association" {
-  
+
   source = "../modules/route_table_association"
-  
-  subnet_id = module.eks_subnet_1.subnet_id
+
+  subnet_id      = module.eks_subnet_1.subnet_id
   route_table_id = module.route_table.id
 
-  depends_on = [ module.route_table ]
+  depends_on = [module.route_table]
 
 }
 
 module "subnet_2_rt_association" {
-  
+
   source = "../modules/route_table_association"
-  
-  subnet_id = module.eks_subnet_2.subnet_id
+
+  subnet_id      = module.eks_subnet_2.subnet_id
   route_table_id = module.route_table.id
 
-  depends_on = [ module.route_table ]
+  depends_on = [module.route_table]
 
 }

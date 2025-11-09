@@ -14,7 +14,6 @@ resource "aws_eks_node_group" "eks_node_group" {
   }
 
   tags = {
-    Name        = var.node_group_name
-    Environment = "dev"
+    Name = var.node_group_name
   }
 }
