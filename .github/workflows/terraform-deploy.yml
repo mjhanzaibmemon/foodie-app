@@ -61,7 +61,8 @@ jobs:
         run: aws sts get-caller-identity
 
       - name: Terraform Init
-        run: terraform -chdir=${{ env.TF_WORKING_DIR }} init \
+        run: |
+          terraform -chdir=${{ env.TF_WORKING_DIR }} init \
             -backend-config="bucket=${{ env.state_bucket }}" \
             -backend-config="key=infra/terraform.tfstate" \
             -backend-config="region=us-east-2"
