@@ -41,14 +41,17 @@ jobs:
             echo "Using DEV AWS credentials"
             echo "AWS_ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_KEY_ID_DEV }}" >> $GITHUB_ENV
             echo "AWS_SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY_DEV }}" >> $GITHUB_ENV
+            echo "state_bucket=${{ secrets.DEV_STATE_BUCKET }}" >> $GITHUB_ENV
           elif [ "$BRANCH" == "stage" ]; then
             echo "Using STAGE AWS credentials"
             echo "AWS_ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_KEY_ID_STAGE }}" >> $GITHUB_ENV
             echo "AWS_SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY_STAGE }}" >> $GITHUB_ENV
+            echo "state_bucket=${{ secrets.STAGE_STATE_BUCKET }}" >> $GITHUB_ENV
           elif [ "$BRANCH" == "main" ]; then
             echo "Using PROD AWS credentials"
             echo "AWS_ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_KEY_ID_PROD }}" >> $GITHUB_ENV
             echo "AWS_SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY_PROD }}" >> $GITHUB_ENV
+            echo "state_bucket=${{ secrets.PROD_STATE_BUCKET }}" >> $GITHUB_ENV
           else
             echo "⚠️ Unknown branch: $BRANCH"
             exit 1
@@ -58,10 +61,13 @@ jobs:
         run: aws sts get-caller-identity
 
       - name: Terraform Init
-        run: terraform -chdir=${{ env.TF_WORKING_DIR }} init
+        run: terraform -chdir=${{ env.TF_WORKING_DIR }} init \
+            -backend-config="bucket=${{ env.state_bucket }}" \
+            -backend-config="key=infra/terraform.tfstate" \
+            -backend-config="region=us-east-2"
 
       - name: Terraform Validate
-        run: terraform -chdir=${{ env.TF_WORKING_DIR }} validate
+        run: terraform -chdir=${{ env.TF_WORKING_DIR }} validate 
 
       - name: Terraform Plan
         if: github.event.inputs.action == 'apply'
