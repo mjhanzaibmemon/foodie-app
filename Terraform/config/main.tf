@@ -15,7 +15,7 @@ data "aws_vpc" "existing" {
 module "vpc" {
   source     = "../modules/vpc"
   count      = var.existing_vpc_id == "" ? 1 : 0
-  cidr_block = "10.0.0.0/16"
+  cidr_block = "10.1.0.0/16"
   tags_name  = "foodie-vpc"
 }
 
@@ -27,8 +27,9 @@ locals {
 #                           Internet Gateway                                   #
 ################################################################################
 module "internet_gateway" {
-  source = "../modules/igw"
-  vpc_id = local.vpc_id
+  source    = "../modules/igw"
+  vpc_id    = local.vpc_id
+  tags_name = "foodie-igw-${var.environment}"
 
   depends_on = [module.vpc, data.aws_vpc.existing]
 }
@@ -62,7 +63,7 @@ module "routes" {
 module "ecs_subnet_1" {
   source                  = "../modules/subnet"
   vpc_id                  = local.vpc_id
-  cidr_block              = "10.0.2.0/24"
+  cidr_block              = "10.1.2.0/24"
   map_public_ip_on_launch = true
   availability_zone       = "${var.aws_region}a"
 
@@ -72,7 +73,7 @@ module "ecs_subnet_1" {
 module "ecs_subnet_2" {
   source                  = "../modules/subnet"
   vpc_id                  = local.vpc_id
-  cidr_block              = "10.0.1.0/24"
+  cidr_block              = "10.1.1.0/24"
   map_public_ip_on_launch = true
   availability_zone       = "${var.aws_region}b"
 
@@ -85,7 +86,7 @@ module "ecs_subnet_2" {
 module "rds_subnet_1" {
   source                  = "../modules/subnet"
   vpc_id                  = local.vpc_id
-  cidr_block              = "10.0.3.0/24"
+  cidr_block              = "10.1.3.0/24"
   map_public_ip_on_launch = false
   availability_zone       = "${var.aws_region}b"
 
@@ -95,7 +96,7 @@ module "rds_subnet_1" {
 module "rds_subnet_2" {
   source                  = "../modules/subnet"
   vpc_id                  = local.vpc_id
-  cidr_block              = "10.0.4.0/24"
+  cidr_block              = "10.1.4.0/24"
   map_public_ip_on_launch = false
   availability_zone       = "${var.aws_region}a"
 
@@ -108,7 +109,7 @@ module "rds_subnet_2" {
 module "lambda_subnet_2" {
   source                  = "../modules/subnet"
   vpc_id                  = local.vpc_id
-  cidr_block              = "10.0.5.0/24"
+  cidr_block              = "10.1.5.0/24"
   map_public_ip_on_launch = false
   availability_zone       = "${var.aws_region}a"
 
@@ -396,7 +397,7 @@ module "subnet_2_rt_association" {
 ################################################################################
 module "rds_subnet_group" {
   source = "../modules/rds_subnet_group"
-  name   = "foodie-rds-subnet-group"
+  name   = "foodie-rds-subnet-group-${var.environment}"
   subnet_ids = [
     module.rds_subnet_1.subnet_id,
     module.rds_subnet_2.subnet_id
@@ -409,10 +410,10 @@ module "rds_subnet_group" {
 ################################################################################
 module "rds_sg" {
   source        = "../modules/rds_sg"
-  name          = "rds-mysql-sg"
+  name          = "foodie-rds-mysql-sg-${var.environment}"
   vpc_id        = local.vpc_id
   db_port       = 3306
-  ingress_cidrs = ["10.0.0.0/16"]
+  ingress_cidrs = ["10.1.0.0/16"]
 
   depends_on = [module.vpc]
 }
@@ -490,7 +491,7 @@ module "redis" {
 
   vpc_id        = local.vpc_id
   subnet_ids    = [module.rds_subnet_1.subnet_id, module.rds_subnet_2.subnet_id]
-  ingress_cidrs = ["10.0.0.0/16"]
+  ingress_cidrs = ["10.1.0.0/16"]
 
   engine_version        = "6.x"
   node_type             = "cache.t3.small"
