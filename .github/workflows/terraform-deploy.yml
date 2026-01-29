@@ -48,6 +48,7 @@ jobs:
             echo "state_bucket=${{ secrets.DEV_STATE_BUCKET }}" >> $GITHUB_ENV
             echo "state_bucket_region=${{ secrets.DEV_STATE_BUCKET_REGION }}" >> $GITHUB_ENV
             echo "AWS_REGION=${{ secrets.DEV_AWS_REGION }}" >> $GITHUB_ENV
+            echo "AWS_DEFAULT_REGION=${{ secrets.DEV_AWS_REGION }}" >> $GITHUB_ENV
             echo "DB_SECRETS_ARN=${{ secrets.DEV_DB_SECRETS_ARN }}" >> $GITHUB_ENV
             echo "EXISTING_VPC_ID=${{ secrets.EXISTING_VPC_ID_DEV }}" >> $GITHUB_ENV
             echo "DEPLOY_ENV=dev" >> $GITHUB_ENV
@@ -59,6 +60,7 @@ jobs:
             echo "state_bucket=${{ secrets.STAGE_STATE_BUCKET }}" >> $GITHUB_ENV
             echo "state_bucket_region=${{ secrets.STAGE_STATE_BUCKET_REGION }}" >> $GITHUB_ENV
             echo "AWS_REGION=${{ secrets.STAGE_AWS_REGION }}" >> $GITHUB_ENV
+            echo "AWS_DEFAULT_REGION=${{ secrets.STAGE_AWS_REGION }}" >> $GITHUB_ENV
             echo "DB_SECRETS_ARN=${{ secrets.STAGE_DB_SECRETS_ARN }}" >> $GITHUB_ENV
             echo "EXISTING_VPC_ID=${{ secrets.EXISTING_VPC_ID_STAGE }}" >> $GITHUB_ENV
             echo "DEPLOY_ENV=stage" >> $GITHUB_ENV
@@ -70,6 +72,7 @@ jobs:
             echo "state_bucket=${{ secrets.PROD_STATE_BUCKET }}" >> $GITHUB_ENV
             echo "state_bucket_region=${{ secrets.PROD_STATE_BUCKET_REGION }}" >> $GITHUB_ENV
             echo "AWS_REGION=${{ secrets.PROD_AWS_REGION }}" >> $GITHUB_ENV
+            echo "AWS_DEFAULT_REGION=${{ secrets.PROD_AWS_REGION }}" >> $GITHUB_ENV
             echo "DB_SECRETS_ARN=${{ secrets.PROD_DB_SECRETS_ARN }}" >> $GITHUB_ENV
             echo "EXISTING_VPC_ID=${{ secrets.EXISTING_VPC_ID_PROD }}" >> $GITHUB_ENV
             echo "DEPLOY_ENV=prod" >> $GITHUB_ENV
@@ -78,8 +81,6 @@ jobs:
             echo "Unknown branch: $BRANCH"
             exit 1
           fi
-
-          echo "AWS_DEFAULT_REGION=${AWS_REGION}" >> $GITHUB_ENV
 
       - name: Verify AWS credentials
         run: aws sts get-caller-identity
