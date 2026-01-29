@@ -2,7 +2,7 @@
 .env
 .env.*
 !.env.example  # keep a safe example for others
-.github-secrets.env
+github-secrets.env
 
 # Docker
 **/vendor
