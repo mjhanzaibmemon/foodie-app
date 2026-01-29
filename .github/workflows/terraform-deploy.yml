@@ -1,26 +1,31 @@
-name: Terraform Manual Deploy or Destroy
+name: Terraform Deploy or Safe Destroy
 
 on:
   workflow_dispatch:
     inputs:
-      
       action:
-        description: "Select action to perform (apply or destroy)"
+        description: "Select action to perform"
         required: true
         default: "apply"
         type: choice
         options:
           - apply
-          - destroy
+          - destroy-app-only
+          - destroy-all
+
+# ============================================================================
+# DESTROY OPTIONS:
+# - destroy-app-only: Safe destroy - Only ECS, ALB, CloudWatch (RDS/Redis SAFE)
+# - destroy-all: Full destroy - Everything including RDS/Redis (DANGEROUS!)
+# ============================================================================
 
 jobs:
   terraform:
-    name: Terraform ${{ github.event.inputs.action }} on ${{ github.event.inputs.environment }}
+    name: Terraform ${{ github.event.inputs.action }} (branch ${{ github.ref_name }})
     runs-on: ubuntu-latest
 
     env:
       TF_WORKING_DIR: ./Terraform/config
-      AWS_REGION: us-east-1
 
     steps:
       - name: Checkout repository
@@ -29,9 +34,8 @@ jobs:
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
         with:
-          terraform_version: 1.9.8
+          terraform_version: 1.11.4
 
-      # 🔹 Set environment-specific AWS credentials
       - name: Set environment-specific AWS credentials
         run: |
           BRANCH="${GITHUB_REF##*/}"
@@ -42,44 +46,297 @@ jobs:
             echo "AWS_ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_KEY_ID_DEV }}" >> $GITHUB_ENV
             echo "AWS_SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY_DEV }}" >> $GITHUB_ENV
             echo "state_bucket=${{ secrets.DEV_STATE_BUCKET }}" >> $GITHUB_ENV
+            echo "state_bucket_region=${{ secrets.DEV_STATE_BUCKET_REGION }}" >> $GITHUB_ENV
+            echo "AWS_REGION=${{ secrets.DEV_AWS_REGION }}" >> $GITHUB_ENV
+            echo "DB_SECRETS_ARN=${{ secrets.DEV_DB_SECRETS_ARN }}" >> $GITHUB_ENV
+            echo "EXISTING_VPC_ID=${{ secrets.EXISTING_VPC_ID_DEV }}" >> $GITHUB_ENV
+            echo "DEPLOY_ENV=dev" >> $GITHUB_ENV
+
           elif [ "$BRANCH" == "stage" ]; then
             echo "Using STAGE AWS credentials"
             echo "AWS_ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_KEY_ID_STAGE }}" >> $GITHUB_ENV
             echo "AWS_SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY_STAGE }}" >> $GITHUB_ENV
             echo "state_bucket=${{ secrets.STAGE_STATE_BUCKET }}" >> $GITHUB_ENV
+            echo "state_bucket_region=${{ secrets.STAGE_STATE_BUCKET_REGION }}" >> $GITHUB_ENV
+            echo "AWS_REGION=${{ secrets.STAGE_AWS_REGION }}" >> $GITHUB_ENV
+            echo "DB_SECRETS_ARN=${{ secrets.STAGE_DB_SECRETS_ARN }}" >> $GITHUB_ENV
+            echo "EXISTING_VPC_ID=${{ secrets.EXISTING_VPC_ID_STAGE }}" >> $GITHUB_ENV
+            echo "DEPLOY_ENV=stage" >> $GITHUB_ENV
+
           elif [ "$BRANCH" == "main" ]; then
             echo "Using PROD AWS credentials"
             echo "AWS_ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_KEY_ID_PROD }}" >> $GITHUB_ENV
             echo "AWS_SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY_PROD }}" >> $GITHUB_ENV
             echo "state_bucket=${{ secrets.PROD_STATE_BUCKET }}" >> $GITHUB_ENV
+            echo "state_bucket_region=${{ secrets.PROD_STATE_BUCKET_REGION }}" >> $GITHUB_ENV
+            echo "AWS_REGION=${{ secrets.PROD_AWS_REGION }}" >> $GITHUB_ENV
+            echo "DB_SECRETS_ARN=${{ secrets.PROD_DB_SECRETS_ARN }}" >> $GITHUB_ENV
+            echo "EXISTING_VPC_ID=${{ secrets.EXISTING_VPC_ID_PROD }}" >> $GITHUB_ENV
+            echo "DEPLOY_ENV=prod" >> $GITHUB_ENV
+
           else
-            echo "⚠️ Unknown branch: $BRANCH"
+            echo "Unknown branch: $BRANCH"
             exit 1
           fi
+
+          echo "AWS_DEFAULT_REGION=${AWS_REGION}" >> $GITHUB_ENV
 
       - name: Verify AWS credentials
         run: aws sts get-caller-identity
 
+      - name: Fetch ECR Image URI from SSM
+        run: |
+          set -x
+          echo "Fetching ECR Image URI from SSM Parameter Store..."
+
+          ECR_IMAGE=$(aws ssm get-parameter --name "ECR_IMAGE_URI" --with-decryption --query "Parameter.Value" --output text 2>/dev/null || echo "")
+
+          if [ -z "$ECR_IMAGE" ]; then
+            echo "WARNING: ECR_IMAGE_URI not found in SSM Parameter Store!"
+            echo "Will use ECR repository URL from Terraform"
+            echo "TF_VAR_ecs_container_image=" >> $GITHUB_ENV
+          else
+            echo "ECR Image URI found: $ECR_IMAGE"
+            echo "TF_VAR_ecs_container_image=$ECR_IMAGE" >> $GITHUB_ENV
+          fi
+          set +x
+
       - name: Terraform Init
         run: |
-          terraform -chdir=${{ env.TF_WORKING_DIR }} init \
+          terraform -chdir=${{ env.TF_WORKING_DIR }} init -reconfigure \
             -backend-config="bucket=${{ env.state_bucket }}" \
-            -backend-config="key=infra/terraform.tfstate" \
-            -backend-config="region=us-east-2"
+            -backend-config="key=infra/${{ env.DEPLOY_ENV }}/terraform.tfstate" \
+            -backend-config="region=${state_bucket_region}"
+
+      - name: Import pre-existing AWS resources (best-effort)
+        run: |
+          set -x
+          cd ${{ env.TF_WORKING_DIR }}
+
+          # derive resource names from terraform.tfvars when possible
+          RDS_IDENTIFIER=$(awk -F= '/^rds_identifier/ {gsub(/[" ]/,"",$2); print $2}' terraform.tfvars || true)
+          ECR_REPO_NAME=$(awk -F= '/^ecr_repository_name/ {gsub(/[" ]/,"",$2); print $2}' terraform.tfvars || true)
+          ALB_NAME=$(awk -F= '/^alb_name/ {gsub(/[" ]/,"",$2); print $2}' terraform.tfvars || true)
+
+          import_if_not_in_state() {
+            address="$1"
+            id_cmd="$2"
+
+            if terraform state list 2>/dev/null | grep -q -F "$address"; then
+              echo "SKIP: $address already in state"
+              return 0
+            fi
+
+            id=$(/bin/bash -lc "$id_cmd" 2>/dev/null || true)
+            if [ -z "$id" ]; then
+              echo "SKIP: no AWS resource found for $address"
+              return 0
+            fi
+
+            echo "IMPORT: $address -> $id"
+            terraform import -lock=false "$address" "$id" || echo "WARN: import failed for $address (continuing)"
+          }
+
+          # Import existing resources using environment-specific naming convention
+          import_if_not_in_state \
+            "module.cloudwatch_log_group.aws_cloudwatch_log_group.this" \
+            "aws logs describe-log-groups --log-group-name-prefix '/ecs/foodie-${DEPLOY_ENV}' --query \"logGroups[?logGroupName=='/ecs/foodie-${DEPLOY_ENV}'].logGroupName\" --output text"
+
+          import_if_not_in_state \
+            "module.ecs_task_execution_role.aws_iam_role.aws_iam_role" \
+            "aws iam get-role --role-name foodie-task-exec-role-${DEPLOY_ENV} --query 'Role.RoleName' --output text"
+
+          import_if_not_in_state \
+            "module.ecs_task_role.aws_iam_role.aws_iam_role" \
+            "aws iam get-role --role-name foodie-task-role-${DEPLOY_ENV} --query 'Role.RoleName' --output text"
+
+          import_if_not_in_state \
+            "module.rds_parameter_group.aws_db_parameter_group.this" \
+            "aws rds describe-db-parameter-groups --db-parameter-group-name mysql-parameters --query 'DBParameterGroups[0].DBParameterGroupName' --output text"
+
+          import_if_not_in_state \
+            "module.ecr.aws_ecr_repository.aws_ecr_repository" \
+            "aws ecr describe-repositories --repository-names foodie-ecr --query 'repositories[0].repositoryName' --output text"
+
+          import_if_not_in_state \
+            "module.alb.aws_lb.this" \
+            "aws elbv2 describe-load-balancers --names foodie-alb-${DEPLOY_ENV} --query 'LoadBalancers[0].LoadBalancerArn' --output text"
+
+          import_if_not_in_state \
+            "module.rds_instance.aws_db_instance.this" \
+            "aws rds describe-db-instances --db-instance-identifier foodie-${DEPLOY_ENV}-db --query 'DBInstances[0].DBInstanceIdentifier' --output text || true"
+
+          echo "Import step finished (best-effort)."
 
       - name: Terraform Validate
-        run: terraform -chdir=${{ env.TF_WORKING_DIR }} validate 
+        run: terraform -chdir=${{ env.TF_WORKING_DIR }} validate
 
       - name: Terraform Plan
         if: github.event.inputs.action == 'apply'
-        run: terraform -chdir=${{ env.TF_WORKING_DIR }} plan
+        run: |
+          set -x
+          echo "Starting Terraform Plan..."
+          echo "Environment: ${DEPLOY_ENV}"
+          echo "ECR Image: ${TF_VAR_ecs_container_image}"
 
-      # 🔹 Apply stage
+          terraform -chdir=${{ env.TF_WORKING_DIR }} plan \
+            -var="environment=${DEPLOY_ENV}" \
+            -var="aws_region=${AWS_REGION}" \
+            -var="existing_vpc_id=${EXISTING_VPC_ID}" \
+            -var="ecs_container_image=${TF_VAR_ecs_container_image}" \
+            -var="db_secrets_arn=${DB_SECRETS_ARN}" || {
+            echo "Terraform Plan FAILED!"
+            exit 1
+          }
+
+          echo "Terraform Plan Completed Successfully"
+          set +x
+
       - name: Terraform Apply
         if: github.event.inputs.action == 'apply'
-        run: terraform -chdir=${{ env.TF_WORKING_DIR }} apply -auto-approve
+        run: |
+          set -x
+          echo "Starting Terraform Apply..."
+          echo "Environment: ${DEPLOY_ENV}"
+          echo "ECR Image: ${TF_VAR_ecs_container_image}"
 
-      # 🔹 Destroy stage
-      - name: Terraform Destroy
-        if: github.event.inputs.action == 'destroy'
-        run: terraform -chdir=${{ env.TF_WORKING_DIR }} destroy -auto-approve
+          terraform -chdir=${{ env.TF_WORKING_DIR }} apply -auto-approve \
+            -var="environment=${DEPLOY_ENV}" \
+            -var="aws_region=${AWS_REGION}" \
+            -var="existing_vpc_id=${EXISTING_VPC_ID}" \
+            -var="ecs_container_image=${TF_VAR_ecs_container_image}" \
+            -var="db_secrets_arn=${DB_SECRETS_ARN}" || {
+            echo "Terraform Apply FAILED!"
+            exit 1
+          }
+
+          echo "Terraform Apply Completed Successfully"
+          set +x
+
+      # ============================================================================
+      # SAFE DESTROY - Only Application Resources (RDS/Redis/VPC SAFE!)
+      # ============================================================================
+      - name: Terraform Destroy (App Only - SAFE)
+        if: github.event.inputs.action == 'destroy-app-only'
+        run: |
+          set -x
+          echo "============================================"
+          echo "SAFE DESTROY - Application Resources Only"
+          echo "Environment: ${DEPLOY_ENV}"
+          echo "RDS, Redis, VPC will NOT be destroyed!"
+          echo "============================================"
+
+          cd ${{ env.TF_WORKING_DIR }}
+
+          # Destroy only application resources using -target
+          # Order matters - destroy in reverse dependency order
+
+          echo "Step 1: Destroying ECS Service..."
+          terraform destroy -auto-approve \
+            -var="environment=${DEPLOY_ENV}" \
+            -var="aws_region=${AWS_REGION}" \
+            -var="existing_vpc_id=${EXISTING_VPC_ID}" \
+            -var="db_secrets_arn=${DB_SECRETS_ARN}" \
+            -target=module.ecs_service || echo "ECS Service destroy completed or not found"
+
+          echo "Step 2: Destroying ECS Task Definition..."
+          terraform destroy -auto-approve \
+            -var="environment=${DEPLOY_ENV}" \
+            -var="aws_region=${AWS_REGION}" \
+            -var="existing_vpc_id=${EXISTING_VPC_ID}" \
+            -var="db_secrets_arn=${DB_SECRETS_ARN}" \
+            -target=module.ecs_task_definition || echo "ECS Task Definition destroy completed or not found"
+
+          echo "Step 3: Destroying ALB Listener..."
+          terraform destroy -auto-approve \
+            -var="environment=${DEPLOY_ENV}" \
+            -var="aws_region=${AWS_REGION}" \
+            -var="existing_vpc_id=${EXISTING_VPC_ID}" \
+            -var="db_secrets_arn=${DB_SECRETS_ARN}" \
+            -target=module.alb_listener || echo "ALB Listener destroy completed or not found"
+
+          echo "Step 4: Destroying ALB Target Group..."
+          terraform destroy -auto-approve \
+            -var="environment=${DEPLOY_ENV}" \
+            -var="aws_region=${AWS_REGION}" \
+            -var="existing_vpc_id=${EXISTING_VPC_ID}" \
+            -var="db_secrets_arn=${DB_SECRETS_ARN}" \
+            -target=module.alb_target_group || echo "ALB Target Group destroy completed or not found"
+
+          echo "Step 5: Destroying ALB..."
+          terraform destroy -auto-approve \
+            -var="environment=${DEPLOY_ENV}" \
+            -var="aws_region=${AWS_REGION}" \
+            -var="existing_vpc_id=${EXISTING_VPC_ID}" \
+            -var="db_secrets_arn=${DB_SECRETS_ARN}" \
+            -target=module.alb || echo "ALB destroy completed or not found"
+
+          echo "Step 6: Destroying ECS Cluster..."
+          terraform destroy -auto-approve \
+            -var="environment=${DEPLOY_ENV}" \
+            -var="aws_region=${AWS_REGION}" \
+            -var="existing_vpc_id=${EXISTING_VPC_ID}" \
+            -var="db_secrets_arn=${DB_SECRETS_ARN}" \
+            -target=module.ecs_cluster || echo "ECS Cluster destroy completed or not found"
+
+          echo "Step 7: Destroying CloudWatch Log Group..."
+          terraform destroy -auto-approve \
+            -var="environment=${DEPLOY_ENV}" \
+            -var="aws_region=${AWS_REGION}" \
+            -var="existing_vpc_id=${EXISTING_VPC_ID}" \
+            -var="db_secrets_arn=${DB_SECRETS_ARN}" \
+            -target=module.cloudwatch_log_group || echo "CloudWatch destroy completed or not found"
+
+          echo "Step 8: Destroying IAM Roles..."
+          terraform destroy -auto-approve \
+            -var="environment=${DEPLOY_ENV}" \
+            -var="aws_region=${AWS_REGION}" \
+            -var="existing_vpc_id=${EXISTING_VPC_ID}" \
+            -var="db_secrets_arn=${DB_SECRETS_ARN}" \
+            -target=module.ecs_task_execution_policy_attachment \
+            -target=module.ecs_task_execution_ecr_policy_attachment \
+            -target=module.ecs_task_ecr_policy_attachment \
+            -target=module.ecs_task_execution_role \
+            -target=module.ecs_task_role || echo "IAM Roles destroy completed or not found"
+
+          echo "============================================"
+          echo "SAFE DESTROY COMPLETED!"
+          echo "The following are still intact:"
+          echo "  - VPC and Subnets"
+          echo "  - RDS Instance"
+          echo "  - Redis (ElastiCache)"
+          echo "  - ECR Repository"
+          echo "  - Internet Gateway and Route Tables"
+          echo "============================================"
+          set +x
+
+      # ============================================================================
+      # FULL DESTROY - Everything including RDS/Redis (DANGEROUS!)
+      # ============================================================================
+      - name: Terraform Destroy (ALL - DANGEROUS!)
+        if: github.event.inputs.action == 'destroy-all'
+        run: |
+          set -x
+          echo "============================================"
+          echo "WARNING: FULL DESTROY - ALL RESOURCES!"
+          echo "Environment: ${DEPLOY_ENV}"
+          echo "This will DELETE RDS and Redis too!"
+          echo "============================================"
+
+          terraform -chdir=${{ env.TF_WORKING_DIR }} destroy -auto-approve \
+            -var="environment=${DEPLOY_ENV}" \
+            -var="aws_region=${AWS_REGION}" \
+            -var="existing_vpc_id=${EXISTING_VPC_ID}" \
+            -var="db_secrets_arn=${DB_SECRETS_ARN}" || {
+            echo "Terraform Destroy FAILED!"
+            exit 1
+          }
+
+          echo "Terraform FULL Destroy Completed"
+          set +x
+
+      - name: Show Outputs
+        if: github.event.inputs.action == 'apply'
+        run: |
+          echo "Terraform Outputs:"
+          terraform -chdir=${{ env.TF_WORKING_DIR }} output || echo "No outputs to show"

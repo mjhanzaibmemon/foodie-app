@@ -1,230 +1,51 @@
 ################################################################################
+#                    NETWORK INFRASTRUCTURE - VPC & SUBNETS                    #
+################################################################################
+
+################################################################################
 #                               VPC                                            #
 ################################################################################
 
+# Use existing VPC if existing_vpc_id is provided, otherwise create new
+data "aws_vpc" "existing" {
+  count = var.existing_vpc_id != "" ? 1 : 0
+  id    = var.existing_vpc_id
+}
+
 module "vpc" {
   source     = "../modules/vpc"
+  count      = var.existing_vpc_id == "" ? 1 : 0
   cidr_block = "10.0.0.0/16"
-  tags_name  = "vpc"
+  tags_name  = "foodie-vpc"
+}
+
+locals {
+  vpc_id = var.existing_vpc_id != "" ? data.aws_vpc.existing[0].id : module.vpc[0].vpc_id
 }
 
 ################################################################################
-#                         EKS Cluster Subnets                                  #
+#                           Internet Gateway                                   #
 ################################################################################
-
-module "eks_subnet_1" {
-  source                  = "../modules/subnet"
-  vpc_id                  = module.vpc.vpc_id
-  cidr_block              = "10.0.2.0/24"
-  map_public_ip_on_launch = true
-  availability_zone       = "us-east-2a"
-
-  depends_on = [module.vpc]
-}
-
-module "eks_subnet_2" {
-  source                  = "../modules/subnet"
-  vpc_id                  = module.vpc.vpc_id
-  cidr_block              = "10.0.1.0/24"
-  map_public_ip_on_launch = true
-  availability_zone       = "us-east-2b"
-
-  depends_on = [module.vpc]
-}
-
-################################################################################
-#                           IAM ROLES                                          #
-################################################################################
-
-module "eks_cluster_iam_role" {
-  source    = "../modules/iam"
-  role_name = "eks_cluster_role"
-  assume_role_policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [{
-      Effect    = "Allow"
-      Principal = { Service = "eks.amazonaws.com" }
-      Action    = "sts:AssumeRole"
-    }]
-  })
-}
-
-# EKS Node Group Role
-module "eks_node_group_role" {
-  source    = "../modules/iam"
-  role_name = "eks_node_role"
-  assume_role_policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [{
-      Effect    = "Allow"
-      Principal = { Service = "ec2.amazonaws.com" }
-      Action    = "sts:AssumeRole"
-    }]
-  })
-}
-
-################################################################################
-#                   EKS Cluster Role Policy Attachments                        #
-################################################################################
-
-module "eks_cluster_policy_attachment" {
-  source                      = "../modules/iam_role_policy_attachment"
-  policy_attachment_role_name = module.eks_cluster_iam_role.role_name
-  cluster_policy_arn          = "arn:aws:iam::aws:policy/AmazonEKSClusterPolicy"
-
-  depends_on = [module.eks_cluster_iam_role]
-}
-
-# Attach AmazonEKSServicePolicy to cluster role
-module "eks_service_policy_attachment" {
-  source                      = "../modules/iam_role_policy_attachment"
-  policy_attachment_role_name = module.eks_cluster_iam_role.role_name
-  cluster_policy_arn          = "arn:aws:iam::aws:policy/AmazonEKSServicePolicy"
-
-  depends_on = [module.eks_cluster_iam_role]
-}
-
-################################################################################
-#                   Node Group Policy Attachments                              #
-################################################################################
-
-module "eks_worker_node_policy_attachment" {
-  source                      = "../modules/iam_role_policy_attachment"
-  policy_attachment_role_name = module.eks_node_group_role.role_name
-  cluster_policy_arn          = "arn:aws:iam::aws:policy/AmazonEKSWorkerNodePolicy"
-
-  depends_on = [module.eks_node_group_role]
-}
-
-# CNI Policy
-module "eks_node_cni_policy_attachment" {
-  source                      = "../modules/iam_role_policy_attachment"
-  policy_attachment_role_name = module.eks_node_group_role.role_name
-  cluster_policy_arn          = "arn:aws:iam::aws:policy/AmazonEKS_CNI_Policy"
-
-  depends_on = [module.eks_node_group_role]
-}
-
-# ECR ReadOnly Policy
-module "eks_node_ecr_policy_attachment" {
-  source                      = "../modules/iam_role_policy_attachment"
-  policy_attachment_role_name = module.eks_node_group_role.role_name
-  cluster_policy_arn          = "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly"
-
-  depends_on = [module.eks_node_group_role]
-}
-
-################################################################################
-#                               EKS Cluster                                    #
-################################################################################
-
-module "eks_cluster" {
-  source                    = "../modules/eks_cluster"
-  cluster_name              = "my-eks-cluster"
-  kubernetes_version        = "1.32"
-  role_arn                  = module.eks_cluster_iam_role.role_arn
-  authentication_mode       = "API"
-  subnet_ids                = [module.eks_subnet_1.subnet_id, module.eks_subnet_2.subnet_id]
-  enabled_cluster_log_types = ["api", "audit", "authenticator"]
-  service_ipv4_cidr         = "172.20.0.0/16"
-
-  endpoint_private_access = true
-  endpoint_public_access  = true
-  public_access_cidrs     = ["0.0.0.0/0"]
-
-  tags = {
-    Project = "eks-setup"
-  }
-
-  depends_on = [
-    module.vpc,
-    module.eks_cluster_iam_role,
-    module.eks_cluster_policy_attachment,
-    module.eks_service_policy_attachment
-  ]
-}
-
-################################################################################
-#                               EKS Node Group                                 #
-################################################################################
-
-module "eks_node_group" {
-  source = "../modules/eks_node_group"
-
-  cluster_name    = module.eks_cluster.cluster_name
-  node_group_name = "eks_node_group_default"
-  node_role_arn   = module.eks_node_group_role.role_arn
-
-  subnet_ids = [
-    module.eks_subnet_1.subnet_id,
-    module.eks_subnet_2.subnet_id
-  ]
-
-  ami_type       = "AL2023_x86_64_STANDARD"
-  instance_types = ["t2.micro"]
-
-  desired_size = 1
-  max_size     = 3
-  min_size     = 1
-
-
-  depends_on = [
-    module.eks_node_group_role,
-    module.eks_cluster,
-    module.eks_worker_node_policy_attachment,
-    module.eks_node_cni_policy_attachment,
-    module.eks_node_ecr_policy_attachment,
-  ]
-}
-
-################################################################################
-#                               ECR Repository                                 #
-################################################################################
-
-module "ecr" {
-  source               = "../modules/ecr"
-  ecr_repository_name  = "my-ecr-repo"
-  image_tag_mutability = "MUTABLE"
-  scan_on_push         = true
-
-  depends_on = [
-    module.eks_node_ecr_policy_attachment
-  ]
-}
-
-################################################################################
-#                               Internet Gateway                               #
-################################################################################
-
 module "internet_gateway" {
-
   source = "../modules/igw"
+  vpc_id = local.vpc_id
 
-  vpc_id = module.vpc.vpc_id
-
-  depends_on = [module.vpc]
+  depends_on = [module.vpc, data.aws_vpc.existing]
 }
 
 ################################################################################
-#                                  RouteTable                                  #
+#                     RouteTable & Routes                                      #
 ################################################################################
-
 module "route_table" {
-
   source = "../modules/route_table"
 
-  vpc_id  = module.vpc.vpc_id
-  rt_name = "Internet_route"
+  vpc_id  = local.vpc_id
+  rt_name = "foodie-route-${var.environment}"
 
-  depends_on = [module.eks_subnet_1, module.eks_subnet_2]
+  depends_on = [module.ecs_subnet_1, module.ecs_subnet_2]
 }
 
-################################################################################
-#                                    Route                                    #
-################################################################################
-
 module "routes" {
-
   source = "../modules/route"
 
   route_table_id         = module.route_table.id
@@ -235,27 +56,482 @@ module "routes" {
 }
 
 ################################################################################
-#                           Route Table Association                            #
+#                         ECS Subnets                                          #
 ################################################################################
 
+module "ecs_subnet_1" {
+  source                  = "../modules/subnet"
+  vpc_id                  = local.vpc_id
+  cidr_block              = "10.0.2.0/24"
+  map_public_ip_on_launch = true
+  availability_zone       = "${var.aws_region}a"
+
+  depends_on = [module.vpc, data.aws_vpc.existing]
+}
+
+module "ecs_subnet_2" {
+  source                  = "../modules/subnet"
+  vpc_id                  = local.vpc_id
+  cidr_block              = "10.0.1.0/24"
+  map_public_ip_on_launch = true
+  availability_zone       = "${var.aws_region}b"
+
+  depends_on = [module.vpc, data.aws_vpc.existing]
+}
+
+################################################################################
+#                         RDS Subnet                                           #
+################################################################################
+module "rds_subnet_1" {
+  source                  = "../modules/subnet"
+  vpc_id                  = local.vpc_id
+  cidr_block              = "10.0.3.0/24"
+  map_public_ip_on_launch = false
+  availability_zone       = "${var.aws_region}b"
+
+  depends_on = [module.vpc, data.aws_vpc.existing]
+}
+
+module "rds_subnet_2" {
+  source                  = "../modules/subnet"
+  vpc_id                  = local.vpc_id
+  cidr_block              = "10.0.4.0/24"
+  map_public_ip_on_launch = false
+  availability_zone       = "${var.aws_region}a"
+
+  depends_on = [module.vpc, data.aws_vpc.existing]
+}
+
+################################################################################
+#                         Lambda Subnet                                        #
+################################################################################
+module "lambda_subnet_2" {
+  source                  = "../modules/subnet"
+  vpc_id                  = local.vpc_id
+  cidr_block              = "10.0.5.0/24"
+  map_public_ip_on_launch = false
+  availability_zone       = "${var.aws_region}a"
+
+  depends_on = [module.vpc, data.aws_vpc.existing]
+}
+
+################################################################################
+#                   ECS TASK EXECUTION ROLE                                    #
+################################################################################
+module "ecs_task_execution_role" {
+  source    = "../modules/iam"
+  role_name = "foodie-task-exec-role-${var.environment}"
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect    = "Allow"
+      Principal = { Service = "ecs-tasks.amazonaws.com" }
+      Action    = "sts:AssumeRole"
+    }]
+  })
+}
+
+module "ecs_task_role" {
+  source    = "../modules/iam"
+  role_name = "foodie-task-role-${var.environment}"
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect    = "Allow"
+      Principal = { Service = "ecs-tasks.amazonaws.com" }
+      Action    = "sts:AssumeRole"
+    }]
+  })
+}
+
+################################################################################
+#                   ECS Task Execution Role Policy Attachments                 #
+################################################################################
+module "ecs_task_execution_policy_attachment" {
+  source                      = "../modules/iam_role_policy_attachment"
+  policy_attachment_role_name = module.ecs_task_execution_role.role_name
+  cluster_policy_arn          = "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
+
+  depends_on = [module.ecs_task_execution_role]
+}
+
+module "ecs_task_execution_ecr_policy_attachment" {
+  source                      = "../modules/iam_role_policy_attachment"
+  policy_attachment_role_name = module.ecs_task_execution_role.role_name
+  cluster_policy_arn          = "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly"
+
+  depends_on = [module.ecs_task_execution_role]
+}
+
+# Secrets Manager read permission for ECS
+resource "aws_iam_role_policy" "ecs_secrets_manager_policy" {
+  name = "foodie-secrets-manager-policy-${var.environment}"
+  role = module.ecs_task_execution_role.role_name
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "secretsmanager:GetSecretValue"
+        ]
+        Resource = var.db_secrets_arn != "" ? [var.db_secrets_arn] : ["*"]
+      }
+    ]
+  })
+
+  depends_on = [module.ecs_task_execution_role]
+}
+
+################################################################################
+#                   ECS Task Role Policy Attachments                           #
+################################################################################
+module "ecs_task_ecr_policy_attachment" {
+  source                      = "../modules/iam_role_policy_attachment"
+  policy_attachment_role_name = module.ecs_task_role.role_name
+  cluster_policy_arn          = "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly"
+
+  depends_on = [module.ecs_task_role]
+}
+
+################################################################################
+#                      CloudWatch Log Group                                    #
+################################################################################
+module "cloudwatch_log_group" {
+  source            = "../modules/cloudwatch_log_group"
+  log_group_name    = "/ecs/foodie-${var.environment}"
+  retention_in_days = 7
+}
+
+################################################################################
+#                       ECS COMPUTE RESOURCES                                  #
+################################################################################
+
+################################################################################
+#                         ECS Cluster                                          #
+################################################################################
+module "ecs_cluster" {
+  source       = "../modules/ecs_cluster"
+  cluster_name = "foodie-cluster-${var.environment}"
+
+  enable_container_insights      = true
+  default_capacity_provider_base = 1
+
+  depends_on = [module.vpc]
+}
+
+################################################################################
+#                    ECS Task Definition                                       #
+################################################################################
+module "ecs_task_definition" {
+  source = "../modules/ecs_task_definition"
+
+  task_family        = "foodie-${var.environment}"
+  container_name     = "foodie-container"
+  container_image    = var.ecs_container_image != "" ? var.ecs_container_image : module.ecr.ecr_repository_url
+  container_port     = 80
+  task_cpu           = var.ecs_task_cpu
+  task_memory        = var.ecs_task_memory
+  execution_role_arn = module.ecs_task_execution_role.role_arn
+  task_role_arn      = module.ecs_task_role.role_arn
+  log_group_name     = module.cloudwatch_log_group.log_group_name
+  aws_region         = var.aws_region
+
+  # Only ENVIRONMENT is hardcoded - everything else from Secrets Manager
+  container_environment = [
+    {
+      name  = "ENVIRONMENT"
+      value = var.environment
+    }
+  ]
+
+  # ALL DB/Redis values from Secrets Manager
+  container_secrets = var.db_secrets_arn != "" ? [
+    {
+      name      = "DB_HOST"
+      valueFrom = "${var.db_secrets_arn}:DB_HOST::"
+    },
+    {
+      name      = "DB_USER"
+      valueFrom = "${var.db_secrets_arn}:DB_USER::"
+    },
+    {
+      name      = "DB_PASS"
+      valueFrom = "${var.db_secrets_arn}:DB_PASS::"
+    },
+    {
+      name      = "DB_NAME"
+      valueFrom = "${var.db_secrets_arn}:DB_NAME::"
+    },
+    {
+      name      = "DB_PORT"
+      valueFrom = "${var.db_secrets_arn}:DB_PORT::"
+    },
+    {
+      name      = "REDIS_HOST"
+      valueFrom = "${var.db_secrets_arn}:REDIS_HOST::"
+    },
+    {
+      name      = "REDIS_PORT"
+      valueFrom = "${var.db_secrets_arn}:REDIS_PORT::"
+    }
+  ] : []
+
+  depends_on = [
+    module.ecs_task_execution_role,
+    module.ecs_task_role,
+    module.cloudwatch_log_group,
+    module.ecr,
+    aws_secretsmanager_secret_version.db_credentials_updated
+  ]
+}
+
+################################################################################
+#                    Application Load Balancer                                 #
+################################################################################
+module "alb" {
+  source = "../modules/alb"
+
+  alb_name                   = "foodie-alb-${var.environment}"
+  alb_security_group_name    = "foodie-alb-sg-${var.environment}"
+  vpc_id                     = local.vpc_id
+  subnet_ids                 = [module.ecs_subnet_1.subnet_id, module.ecs_subnet_2.subnet_id]
+  internal                   = false
+  enable_deletion_protection = false
+
+  depends_on = [module.vpc, module.ecs_subnet_1, module.ecs_subnet_2]
+}
+
+################################################################################
+#                      ALB Target Group                                        #
+################################################################################
+module "alb_target_group" {
+  source = "../modules/alb_target_group"
+
+  target_group_name = "foodie-tg-${var.environment}"
+  target_port       = 80
+
+  vpc_id                           = local.vpc_id
+  health_check_healthy_threshold   = 2
+  health_check_unhealthy_threshold = 2
+  health_check_timeout             = 5
+  health_check_interval            = 30
+  health_check_path                = "/health.php"
+  health_check_matcher             = "200-299"
+
+  depends_on = [module.vpc]
+}
+
+################################################################################
+#                       ALB Listener                                           #
+################################################################################
+module "alb_listener" {
+  source = "../modules/alb_listener"
+
+  alb_arn           = module.alb.alb_arn
+  listener_port     = 80
+  listener_protocol = "HTTP"
+  target_group_arn  = module.alb_target_group.target_group_arn
+
+  depends_on = [module.alb, module.alb_target_group]
+}
+
+################################################################################
+#                       IAM ROLES & POLICIES                                   #
+################################################################################
+
+################################################################################
+#                      ECS Service                                             #
+################################################################################
+module "ecs_service" {
+  source = "../modules/ecs_service"
+
+  service_name          = "foodie-service-${var.environment}"
+  cluster_id            = module.ecs_cluster.cluster_id
+  task_definition_arn   = module.ecs_task_definition.task_definition_arn
+  desired_count         = var.ecs_desired_count
+  vpc_id                = local.vpc_id
+  subnet_ids            = [module.ecs_subnet_1.subnet_id, module.ecs_subnet_2.subnet_id]
+  security_group_name   = "foodie-ecs-sg-${var.environment}"
+  container_name        = "foodie-container"
+  container_port        = 80
+  target_group_arn      = module.alb_target_group.target_group_arn
+  alb_security_group_id = module.alb.alb_security_group_id
+  assign_public_ip      = true
+
+  depends_on = [
+    module.ecs_cluster,
+    module.ecs_task_definition,
+    module.alb_target_group,
+    module.alb
+  ]
+}
+
+################################################################################
+#                    Route Table Associations                                  #
+################################################################################
 module "subnet_1_rt_association" {
-
-  source = "../modules/route_table_association"
-
-  subnet_id      = module.eks_subnet_1.subnet_id
+  source         = "../modules/route_table_association"
+  subnet_id      = module.ecs_subnet_1.subnet_id
   route_table_id = module.route_table.id
 
   depends_on = [module.route_table]
-
 }
 
 module "subnet_2_rt_association" {
-
-  source = "../modules/route_table_association"
-
-  subnet_id      = module.eks_subnet_2.subnet_id
+  source         = "../modules/route_table_association"
+  subnet_id      = module.ecs_subnet_2.subnet_id
   route_table_id = module.route_table.id
 
   depends_on = [module.route_table]
-
 }
+
+################################################################################
+#                       DATABASE INFRASTRUCTURE                                #
+################################################################################
+
+################################################################################
+#                           RDS Subnet Group                                   #
+################################################################################
+module "rds_subnet_group" {
+  source = "../modules/rds_subnet_group"
+  name   = "foodie-rds-subnet-group"
+  subnet_ids = [
+    module.rds_subnet_1.subnet_id,
+    module.rds_subnet_2.subnet_id
+  ]
+  depends_on = [module.rds_subnet_1, module.rds_subnet_2]
+}
+
+################################################################################
+#                           RDS Security Group                                 #
+################################################################################
+module "rds_sg" {
+  source        = "../modules/rds_sg"
+  name          = "rds-mysql-sg"
+  vpc_id        = local.vpc_id
+  db_port       = 3306
+  ingress_cidrs = ["10.0.0.0/16"]
+
+  depends_on = [module.vpc]
+}
+
+################################################################################
+#                         Data Sources - Secrets Manager                       #
+################################################################################
+# Fetch initial DB credentials from Secrets Manager
+data "aws_secretsmanager_secret_version" "db_credentials" {
+  count     = var.db_secrets_arn != "" ? 1 : 0
+  secret_id = var.db_secrets_arn
+}
+
+locals {
+  # Parse the initial secret JSON
+  # User must create secret with: DB_USER, DB_PASS, DB_NAME, DB_PORT, REDIS_PORT
+  initial_credentials = var.db_secrets_arn != "" ? jsondecode(data.aws_secretsmanager_secret_version.db_credentials[0].secret_string) : {}
+
+  db_user    = lookup(local.initial_credentials, "DB_USER", "admin")
+  db_pass    = lookup(local.initial_credentials, "DB_PASS", "changeme")
+  db_name    = lookup(local.initial_credentials, "DB_NAME", var.rds_db_name)
+  db_port    = lookup(local.initial_credentials, "DB_PORT", "3306")
+  redis_port = lookup(local.initial_credentials, "REDIS_PORT", "6379")
+}
+
+################################################################################
+#                           RDS Parameter Group                               #
+################################################################################
+module "rds_parameter_group" {
+  source = "../modules/rds_parameter_group"
+  name   = "foodie-mysql-parameters"
+  family = "mysql8.0"
+
+  parameters = {
+    max_connections = "200"
+  }
+}
+
+################################################################################
+#                           RDS Instance                                      #
+################################################################################
+# RDS - Credentials from Secrets Manager
+module "rds_instance" {
+  source = "../modules/rds_instance"
+
+  identifier     = "foodie-${var.environment}-db"
+  engine_version = var.rds_engine_version
+  instance_class = var.rds_instance_class
+
+  # Credentials from Secrets Manager
+  username = local.db_user
+  password = local.db_pass
+  db_name  = local.db_name
+
+  allocated_storage     = var.rds_allocated_storage
+  max_allocated_storage = var.rds_max_allocated_storage
+
+  storage_type = "gp3"
+
+  db_subnet_group_name = module.rds_subnet_group.subnet_group_name
+  sg_id                = module.rds_sg.sg_id
+
+  depends_on = [
+    module.rds_sg,
+    module.rds_subnet_group
+  ]
+}
+
+################################################################################
+#                           Redis / ElastiCache                                #
+################################################################################
+# Redis - No authentication (internal VPC only)
+module "redis" {
+  source = "../modules/redis"
+
+  vpc_id        = local.vpc_id
+  subnet_ids    = [module.rds_subnet_1.subnet_id, module.rds_subnet_2.subnet_id]
+  ingress_cidrs = ["10.0.0.0/16"]
+
+  engine_version        = "6.x"
+  node_type             = "cache.t3.small"
+  number_cache_clusters = 1
+
+  depends_on = [module.vpc, module.rds_subnet_1, module.rds_subnet_2]
+}
+
+################################################################################
+#                  Update Secrets Manager with Host Values                     #
+################################################################################
+# After RDS/Redis created, update secret with actual HOST values
+resource "aws_secretsmanager_secret_version" "db_credentials_updated" {
+  count     = var.db_secrets_arn != "" ? 1 : 0
+  secret_id = var.db_secrets_arn
+
+  secret_string = jsonencode({
+    DB_USER    = local.db_user
+    DB_PASS    = local.db_pass
+    DB_NAME    = local.db_name
+    DB_PORT    = local.db_port
+    DB_HOST    = module.rds_instance.db_endpoint_address
+    REDIS_HOST = module.redis.primary_endpoint_address
+    REDIS_PORT = local.redis_port
+  })
+
+  depends_on = [module.rds_instance, module.redis]
+}
+
+################################################################################
+#                           ECR Repository                                     #
+################################################################################
+module "ecr" {
+  source               = "../modules/ecr"
+  ecr_repository_name  = "foodie-ecr"
+  image_tag_mutability = "MUTABLE"
+  scan_on_push         = true
+
+  depends_on = [module.vpc]
+}
+
+################################################################################
+#                      APPLICATION LOAD BALANCER                               #
+################################################################################

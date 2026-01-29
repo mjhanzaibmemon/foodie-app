@@ -1,1 +1,1 @@
-output "id" { value = aws_route_table.eks_route_table.id }
+output "id" { value = aws_route_table.public_route_table.id }
