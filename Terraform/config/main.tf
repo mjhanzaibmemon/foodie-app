@@ -78,7 +78,7 @@ module "routes" {
 module "ecs_subnet_1" {
   source                  = "../modules/subnet"
   vpc_id                  = local.vpc_id
-  cidr_block              = "10.0.2.0/24"
+  cidr_block              = "10.0.6.0/24"
   map_public_ip_on_launch = true
   availability_zone       = "${var.aws_region}a"
 
@@ -88,7 +88,7 @@ module "ecs_subnet_1" {
 module "ecs_subnet_2" {
   source                  = "../modules/subnet"
   vpc_id                  = local.vpc_id
-  cidr_block              = "10.0.1.0/24"
+  cidr_block              = "10.0.7.0/24"
   map_public_ip_on_launch = true
   availability_zone       = "${var.aws_region}b"
 
@@ -101,7 +101,7 @@ module "ecs_subnet_2" {
 module "rds_subnet_1" {
   source                  = "../modules/subnet"
   vpc_id                  = local.vpc_id
-  cidr_block              = "10.0.3.0/24"
+  cidr_block              = "10.0.8.0/24"
   map_public_ip_on_launch = false
   availability_zone       = "${var.aws_region}b"
 
@@ -111,7 +111,7 @@ module "rds_subnet_1" {
 module "rds_subnet_2" {
   source                  = "../modules/subnet"
   vpc_id                  = local.vpc_id
-  cidr_block              = "10.0.4.0/24"
+  cidr_block              = "10.0.9.0/24"
   map_public_ip_on_launch = false
   availability_zone       = "${var.aws_region}a"
 
@@ -124,7 +124,7 @@ module "rds_subnet_2" {
 module "lambda_subnet_2" {
   source                  = "../modules/subnet"
   vpc_id                  = local.vpc_id
-  cidr_block              = "10.0.5.0/24"
+  cidr_block              = "10.0.10.0/24"
   map_public_ip_on_launch = false
   availability_zone       = "${var.aws_region}a"
 
