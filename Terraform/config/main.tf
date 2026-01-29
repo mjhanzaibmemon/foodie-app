@@ -504,9 +504,12 @@ module "rds_instance" {
 module "redis" {
   source = "../modules/redis"
 
-  vpc_id        = local.vpc_id
-  subnet_ids    = [module.rds_subnet_1.subnet_id, module.rds_subnet_2.subnet_id]
-  ingress_cidrs = ["10.0.0.0/16"]
+  vpc_id              = local.vpc_id
+  subnet_ids          = [module.rds_subnet_1.subnet_id, module.rds_subnet_2.subnet_id]
+  ingress_cidrs       = ["10.0.0.0/16"]
+  sg_name             = "foodie-redis-sg-${var.environment}"
+  subnet_group_name   = "foodie-redis-subnet-group-${var.environment}"
+  replication_group_id = "foodie-redis-${var.environment}"
 
   engine_version        = "6.x"
   node_type             = "cache.t3.small"
