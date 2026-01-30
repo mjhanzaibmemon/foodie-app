@@ -48,12 +48,6 @@ variable "aws_region" {
   default     = "us-east-1"
 }
 
-variable "existing_vpc_id" {
-  description = "ID of existing VPC to use (if empty, creates new VPC)"
-  type        = string
-  default     = "" # Pass from GitHub secrets for dev/stage/prod
-}
-
 variable "ecr_repository_name" {
   description = "ECR repository name"
   type        = string

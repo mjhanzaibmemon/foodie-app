@@ -50,7 +50,6 @@ jobs:
             echo "AWS_REGION=${{ secrets.DEV_AWS_REGION }}" >> $GITHUB_ENV
             echo "AWS_DEFAULT_REGION=${{ secrets.DEV_AWS_REGION }}" >> $GITHUB_ENV
             echo "DB_SECRETS_ARN=${{ secrets.DEV_DB_SECRETS_ARN }}" >> $GITHUB_ENV
-            echo "EXISTING_VPC_ID=${{ secrets.EXISTING_VPC_ID_DEV }}" >> $GITHUB_ENV
             echo "DEPLOY_ENV=dev" >> $GITHUB_ENV
 
           elif [ "$BRANCH" == "stage" ]; then
@@ -62,7 +61,6 @@ jobs:
             echo "AWS_REGION=${{ secrets.STAGE_AWS_REGION }}" >> $GITHUB_ENV
             echo "AWS_DEFAULT_REGION=${{ secrets.STAGE_AWS_REGION }}" >> $GITHUB_ENV
             echo "DB_SECRETS_ARN=${{ secrets.STAGE_DB_SECRETS_ARN }}" >> $GITHUB_ENV
-            echo "EXISTING_VPC_ID=${{ secrets.EXISTING_VPC_ID_STAGE }}" >> $GITHUB_ENV
             echo "DEPLOY_ENV=stage" >> $GITHUB_ENV
 
           elif [ "$BRANCH" == "main" ]; then
@@ -74,7 +72,6 @@ jobs:
             echo "AWS_REGION=${{ secrets.PROD_AWS_REGION }}" >> $GITHUB_ENV
             echo "AWS_DEFAULT_REGION=${{ secrets.PROD_AWS_REGION }}" >> $GITHUB_ENV
             echo "DB_SECRETS_ARN=${{ secrets.PROD_DB_SECRETS_ARN }}" >> $GITHUB_ENV
-            echo "EXISTING_VPC_ID=${{ secrets.EXISTING_VPC_ID_PROD }}" >> $GITHUB_ENV
             echo "DEPLOY_ENV=prod" >> $GITHUB_ENV
 
           else
@@ -183,7 +180,6 @@ jobs:
           terraform -chdir=${{ env.TF_WORKING_DIR }} plan \
             -var="environment=${DEPLOY_ENV}" \
             -var="aws_region=${AWS_REGION}" \
-            -var="existing_vpc_id=${EXISTING_VPC_ID}" \
             -var="ecs_container_image=${TF_VAR_ecs_container_image}" \
             -var="db_secrets_arn=${DB_SECRETS_ARN}" || {
             echo "Terraform Plan FAILED!"
@@ -204,7 +200,6 @@ jobs:
           terraform -chdir=${{ env.TF_WORKING_DIR }} apply -auto-approve \
             -var="environment=${DEPLOY_ENV}" \
             -var="aws_region=${AWS_REGION}" \
-            -var="existing_vpc_id=${EXISTING_VPC_ID}" \
             -var="ecs_container_image=${TF_VAR_ecs_container_image}" \
             -var="db_secrets_arn=${DB_SECRETS_ARN}" || {
             echo "Terraform Apply FAILED!"
@@ -236,7 +231,6 @@ jobs:
           terraform destroy -auto-approve \
             -var="environment=${DEPLOY_ENV}" \
             -var="aws_region=${AWS_REGION}" \
-            -var="existing_vpc_id=${EXISTING_VPC_ID}" \
             -var="db_secrets_arn=${DB_SECRETS_ARN}" \
             -target=module.ecs_service || echo "ECS Service destroy completed or not found"
 
@@ -244,7 +238,6 @@ jobs:
           terraform destroy -auto-approve \
             -var="environment=${DEPLOY_ENV}" \
             -var="aws_region=${AWS_REGION}" \
-            -var="existing_vpc_id=${EXISTING_VPC_ID}" \
             -var="db_secrets_arn=${DB_SECRETS_ARN}" \
             -target=module.ecs_task_definition || echo "ECS Task Definition destroy completed or not found"
 
@@ -252,7 +245,6 @@ jobs:
           terraform destroy -auto-approve \
             -var="environment=${DEPLOY_ENV}" \
             -var="aws_region=${AWS_REGION}" \
-            -var="existing_vpc_id=${EXISTING_VPC_ID}" \
             -var="db_secrets_arn=${DB_SECRETS_ARN}" \
             -target=module.alb_listener || echo "ALB Listener destroy completed or not found"
 
@@ -260,7 +252,6 @@ jobs:
           terraform destroy -auto-approve \
             -var="environment=${DEPLOY_ENV}" \
             -var="aws_region=${AWS_REGION}" \
-            -var="existing_vpc_id=${EXISTING_VPC_ID}" \
             -var="db_secrets_arn=${DB_SECRETS_ARN}" \
             -target=module.alb_target_group || echo "ALB Target Group destroy completed or not found"
 
@@ -268,7 +259,6 @@ jobs:
           terraform destroy -auto-approve \
             -var="environment=${DEPLOY_ENV}" \
             -var="aws_region=${AWS_REGION}" \
-            -var="existing_vpc_id=${EXISTING_VPC_ID}" \
             -var="db_secrets_arn=${DB_SECRETS_ARN}" \
             -target=module.alb || echo "ALB destroy completed or not found"
 
@@ -276,7 +266,6 @@ jobs:
           terraform destroy -auto-approve \
             -var="environment=${DEPLOY_ENV}" \
             -var="aws_region=${AWS_REGION}" \
-            -var="existing_vpc_id=${EXISTING_VPC_ID}" \
             -var="db_secrets_arn=${DB_SECRETS_ARN}" \
             -target=module.ecs_cluster || echo "ECS Cluster destroy completed or not found"
 
@@ -284,7 +273,6 @@ jobs:
           terraform destroy -auto-approve \
             -var="environment=${DEPLOY_ENV}" \
             -var="aws_region=${AWS_REGION}" \
-            -var="existing_vpc_id=${EXISTING_VPC_ID}" \
             -var="db_secrets_arn=${DB_SECRETS_ARN}" \
             -target=module.cloudwatch_log_group || echo "CloudWatch destroy completed or not found"
 
@@ -292,7 +280,6 @@ jobs:
           terraform destroy -auto-approve \
             -var="environment=${DEPLOY_ENV}" \
             -var="aws_region=${AWS_REGION}" \
-            -var="existing_vpc_id=${EXISTING_VPC_ID}" \
             -var="db_secrets_arn=${DB_SECRETS_ARN}" \
             -target=module.ecs_task_execution_policy_attachment \
             -target=module.ecs_task_execution_ecr_policy_attachment \
@@ -327,7 +314,6 @@ jobs:
           terraform -chdir=${{ env.TF_WORKING_DIR }} destroy -auto-approve \
             -var="environment=${DEPLOY_ENV}" \
             -var="aws_region=${AWS_REGION}" \
-            -var="existing_vpc_id=${EXISTING_VPC_ID}" \
             -var="db_secrets_arn=${DB_SECRETS_ARN}" || {
             echo "Terraform Destroy FAILED!"
             exit 1

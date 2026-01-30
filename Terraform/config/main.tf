@@ -6,39 +6,23 @@
 #                               VPC                                            #
 ################################################################################
 
-# Use existing VPC if existing_vpc_id is provided, otherwise create new
-data "aws_vpc" "existing" {
-  count = var.existing_vpc_id != "" ? 1 : 0
-  id    = var.existing_vpc_id
-}
-
+# Always create new VPC
 module "vpc" {
   source     = "../modules/vpc"
-  count      = var.existing_vpc_id == "" ? 1 : 0
   cidr_block = "10.0.0.0/16"
   tags_name  = "foodie-vpc-${var.environment}"
 }
 
 locals {
-  vpc_id = var.existing_vpc_id != "" ? data.aws_vpc.existing[0].id : module.vpc[0].vpc_id
+  vpc_id = module.vpc.vpc_id
 }
 
 ################################################################################
 #                           Internet Gateway                                   #
 ################################################################################
-# Use existing IGW if using existing VPC
-data "aws_internet_gateway" "existing" {
-  count = var.existing_vpc_id != "" ? 1 : 0
-  filter {
-    name   = "attachment.vpc-id"
-    values = [local.vpc_id]
-  }
-}
-
-# Create new IGW only if creating new VPC
+# Always create new Internet Gateway
 module "internet_gateway" {
   source    = "../modules/igw"
-  count     = var.existing_vpc_id == "" ? 1 : 0
   vpc_id    = local.vpc_id
   tags_name = "foodie-igw-${var.environment}"
 
@@ -46,7 +30,7 @@ module "internet_gateway" {
 }
 
 locals {
-  igw_id = var.existing_vpc_id != "" ? data.aws_internet_gateway.existing[0].id : module.internet_gateway[0].igw_id
+  igw_id = module.internet_gateway.igw_id
 }
 
 ################################################################################
@@ -82,7 +66,7 @@ module "ecs_subnet_1" {
   map_public_ip_on_launch = true
   availability_zone       = "${var.aws_region}a"
 
-  depends_on = [module.vpc, data.aws_vpc.existing]
+  depends_on = [module.vpc]
 }
 
 module "ecs_subnet_2" {
@@ -92,7 +76,7 @@ module "ecs_subnet_2" {
   map_public_ip_on_launch = true
   availability_zone       = "${var.aws_region}b"
 
-  depends_on = [module.vpc, data.aws_vpc.existing]
+  depends_on = [module.vpc]
 }
 
 ################################################################################
@@ -105,7 +89,7 @@ module "rds_subnet_1" {
   map_public_ip_on_launch = false
   availability_zone       = "${var.aws_region}b"
 
-  depends_on = [module.vpc, data.aws_vpc.existing]
+  depends_on = [module.vpc]
 }
 
 module "rds_subnet_2" {
@@ -115,7 +99,7 @@ module "rds_subnet_2" {
   map_public_ip_on_launch = false
   availability_zone       = "${var.aws_region}a"
 
-  depends_on = [module.vpc, data.aws_vpc.existing]
+  depends_on = [module.vpc]
 }
 
 ################################################################################
@@ -128,7 +112,7 @@ module "lambda_subnet_2" {
   map_public_ip_on_launch = false
   availability_zone       = "${var.aws_region}a"
 
-  depends_on = [module.vpc, data.aws_vpc.existing]
+  depends_on = [module.vpc]
 }
 
 ################################################################################
